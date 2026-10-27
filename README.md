@@ -11,7 +11,24 @@ Apresentações animadas que explicam tecnologia começando por uma **metáfora 
 | Trilha | Pasta | Conteúdo | Status |
 |---|---|---|---|
 | **RAG** | [`rag/`](rag/) | 22 módulos · 503 slides · 183 animações D3 · 108 artigos científicos | Publicada |
-| **Introdução ao Python** | `python/` | Metáforas animadas para as 10 aulas do módulo de Programação em Python (ITEAM Boa Vista) | Em preparação |
+| **Introdução ao Python** | [`python/`](python/) | 10 aulas · 46 metáforas animadas · módulo de Programação em Python (ITEAM Boa Vista, Turma 2) | Publicada |
+
+## Trilha Introdução ao Python
+
+Decks de apoio para projetar entre os slides oficiais do módulo, com uma metáfora do cotidiano por conceito e a saída real do Python em cada cena.
+
+| Aula | Data | Tema | Metáforas |
+|---|---|---|---|
+| [01](python/aula-01-introducao/) | 30/10 | Introdução ao Python | montador e manual, carteiro do PATH, conversa × receita, vitrine das aspas, portaria do input, crachá da variável |
+| [02](python/aula-02-variaveis-tipos/) | 03/11 | Variáveis, tipos e operadores | raio-x da bagagem, ovos nas caixas, triagem do pronto-socorro, foto × nota, formulário da f-string |
+| [03](python/aula-03-condicionais/) | 04/11 | Estruturas condicionais | cordão VIP, separador de moedas, balcão de carimbos, cofre de duas chaves, caixas sacudidas |
+| [04](python/aula-04-repeticao-excecoes/) | 05/11 | Repetição e exceções | pista com cancela, pedras do igarapé, três elevadores, calhas de erro, tapete × pá |
+| [05](python/aula-05-listas-tuplas/) | 06/11 | Listas e tuplas | pão fatiado, quadro × placa, link × fotocópia, caixa de encomenda |
+| [06](python/aula-06-dicionarios-conjuntos/) | 09/11 | Dicionários, conjuntos e compreensões | guarda-volumes, álbum de figurinhas, carimbos das listas, cozinha da compreensão |
+| [07](python/aula-07-funcoes-modulos/) | 10/11 | Funções e módulos | loja online, prato padrão, quarto × sala, bonecas russas, caixa de ferramentas |
+| [08](python/aula-08-classes-objetos/) | 11/11 | Classes e objetos | forma de bolo, cartão no caixa, placa do prédio, hotel |
+| [09](python/aula-09-heranca-polimorfismo/) | 12/11 | Herança, encapsulamento e polimorfismo | balcão da farmácia, blocos de montar, tomada, dois livros |
+| [10](python/aula-10-design-classes/) | 13/11 | Design de classes | gaveteiro, gerador compartilhado, carta com lacuna, mapa do módulo |
 
 ## Trilha RAG
 

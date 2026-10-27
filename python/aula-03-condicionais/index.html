@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Aula 03 · O programa decide</title>
+
+<!-- ==========================================================
+     MIRA-DEFAULT · template oficial padrão do Mira
+     ----------------------------------------------------------
+     Um slide = um título em cima e uma animação ocupando todo o
+     resto do quadro 16:9. Sem card, sem pílulas, sem moldura: a
+     animação É o slide.
+
+     Veio do mira-studio-full, mas SÓ a parte de animação. Ficaram
+     de fora, de propósito, as coisas que existem para gravar:
+       - regra dos terços (animação 2/3 + câmera 1/3)
+       - layout de câmera cheia
+       - teleprompter e gravador
+     Slide comum não tem câmera. Quem precisa gravar usa
+     /mira-studio-full (16:9) ou /mira-studio (9:16), que seguem
+     existindo com essas peças.
+
+     ESTRUTURA DE UM SLIDE DE CONTEÚDO (é o contrato; os agentes
+     de animação procuram .anim-stage):
+
+       <section>
+         <div class="slide-main">
+           <h2>Título <span class="accent">destacado</span></h2>
+           <div class="anim-stage"><svg id="..."></svg></div>
+         </div>
+       </section>
+
+     O PALCO OCUPA O QUADRO INTEIRO, de borda a borda: o .anim-stage
+     é absoluto e cobre a <section> toda, por baixo do título. Não é
+     mais "o que sobra depois do título".
+
+     O TÍTULO FICA POR CIMA de tudo que é do template. A faixa de
+     z-index deste arquivo vai até 10; os módulos de autoria
+     (mira-draw, mira-edit) usam 99998 e acima, e continuam acima do
+     título de propósito, senão não daria para desenhar nem editar
+     por cima dele.
+
+     A ANIMAÇÃO EVITA A FAIXA DO TÍTULO. O palco() mede o título e
+     entrega a faixa livre em unidades do viewBox:
+
+       F.topo         y onde a área livre começa (abaixo do título)
+       F.alturaUtil   altura dessa área
+       F.vy(k)        mapeia 0..1 na faixa livre. Use no lugar de F.H * k
+
+     Regra: nada FOCAL acima de F.topo. Ambiente pode atravessar,
+     porque atrás do título ele lê como profundidade, não como
+     conflito. Os 50px de padding continuam sendo a área segura das
+     bordas.
+     ========================================================== -->
+<link href="assets/vendor/inter.css" rel="stylesheet">
+<script src="assets/vendor/d3.v7.min.js"></script>
+<script src="mira/mira-motion-blur.js"></script>
+<style>
+/* @MIRA:THEME:START */
+/* MIRA THEME: mira-dark (padrão)
+   Identidade clássica do canal: fundo preto, laranja vibrante,
+   glassmorphism no estilo clássico do canal. */
+:root {
+    --mira-primary: #5B9BF5;
+    --mira-crop: #35D07F;
+    --mira-bg: #000000;
+    --mira-text: #ffffff;
+    --mira-text-soft: rgba(255, 255, 255, 0.70);
+    --mira-text-softer: rgba(255, 255, 255, 0.50);
+    --mira-card-bg: rgba(255, 255, 255, 0.05);
+    --mira-card-border: rgba(255, 255, 255, 0.10);
+    --mira-glow-soft: rgba(91, 155, 245, 0.15);
+    --mira-glow-strong: rgba(91, 155, 245, 0.25);
+    --mira-icon-bg: rgba(91, 155, 245, 0.15);
+    --mira-icon-border: rgba(91, 155, 245, 0.30);
+    --mira-pill-bg: rgba(255, 255, 255, 0.04);
+    --mira-pill-border: rgba(255, 255, 255, 0.08);
+    --mira-stage-glow: rgba(91, 155, 245, 0.06);
+    --mira-accent-2: #94BEF9;
+}
+
+
+/* ============================================================
+   MIRA — base.css
+   Estrutura compartilhada por todos os temas.
+   Os temas definem apenas as CSS variables (--mira-*).
+   ============================================================ */
+
+body {
+    background: var(--mira-bg);
+    min-height: 100vh;
+    color: var(--mira-text);
+    font-family: 'Inter', sans-serif;
+}
+
+.primary-color { color: var(--mira-primary); }
+.primary-bg { background: var(--mira-primary); }
+
+.glass-card {
+    background: var(--mira-card-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--mira-card-border);
+    box-shadow: 0 10px 30px var(--mira-glow-soft);
+    transition: all 0.3s ease;
+    border-radius: 0.75rem;
+}
+
+.glass-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px var(--mira-glow-strong);
+}
+
+.icon-hero {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    background: var(--mira-icon-bg);
+    border: 1px solid var(--mira-icon-border);
+}
+
+.attribute-pill {
+    background: var(--mira-pill-bg);
+    border: 1px solid var(--mira-pill-border);
+    transition: all 0.25s ease;
+    border-radius: 9999px;
+}
+
+.attribute-pill:hover {
+    background: var(--mira-icon-bg);
+    border-color: var(--mira-icon-border);
+    transform: translateY(-3px);
+}
+
+/* Palco de animação D3 — tamanho padrão do canvas */
+.anim-stage {
+    width: 100%;
+    height: clamp(400px, 60vh, 620px);
+    background: radial-gradient(circle at 50% 50%, var(--mira-stage-glow), transparent 70%);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+.anim-stage svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.replay-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+    background: var(--mira-pill-bg);
+    border: 1px solid var(--mira-pill-border);
+    color: var(--mira-text-soft);
+    border-radius: 9999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.replay-btn:hover {
+    background: var(--mira-icon-bg);
+    color: var(--mira-primary);
+}
+
+.text-soft { color: var(--mira-text-soft); }
+.text-softer { color: var(--mira-text-softer); }
+
+@keyframes mira-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.85; }
+}
+
+@keyframes mira-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+@keyframes mira-gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* @MIRA:THEME:END */
+
+/* ----------------------------------------------------------
+   A estrutura vem DEPOIS do bloco do tema de propósito: o
+   "npx mira-animator new --theme=..." troca só aquele bloco, e
+   o que está aqui embaixo precisa continuar valendo por cima do
+   que o tema trouxer.
+   ---------------------------------------------------------- */
+:root {
+    --accent: var(--mira-primary);
+    --bg: var(--mira-bg);
+    --ink: var(--mira-text);
+    --muted: var(--mira-text-soft);
+    --line: var(--mira-card-border);
+    /* quadro 16:9 que cabe inteiro na janela */
+    --fmt-w: min(100vw, calc(100vh * 16 / 9));
+    --fmt-h: calc(var(--fmt-w) * 9 / 16);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { background: #000000; scroll-behavior: smooth; scroll-snap-type: y proximity; }
+/* sem barra de rolagem: ela roubaria largura do quadro e criaria
+   scroll horizontal em tela cheia. Navegue por seta ou roda. */
+html { scrollbar-width: none; overflow-x: hidden; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+
+body {
+    background: #000000;
+    color: var(--ink);
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+body > section {
+    position: relative;
+    width: var(--fmt-w);
+    height: var(--fmt-h);
+    min-height: var(--fmt-h);
+    /* centraliza o quadro: em tela que não é 16:9 a sobra vira
+       faixa cinza acima e abaixo, nunca o slide seguinte */
+    margin: calc((100vh - var(--fmt-h)) / 2) 0;
+    scroll-margin-top: calc((100vh - var(--fmt-h)) / 2);
+    overflow: hidden;
+    background: var(--bg);
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    isolation: isolate;
+}
+
+/* DIRETIVA DA CAPA: o título do primeiro slide nunca quebra
+   deixando artigo ou preposição sozinho na linha de baixo. */
+body > section:first-of-type h1,
+body > section:first-of-type h2 { text-wrap: balance; }
+
+h1 { font-size: clamp(34px, 7.4vh, 72px); line-height: 1.02; letter-spacing: -.02em; font-weight: 800; }
+h2 { font-size: clamp(28px, 4.6vh, 46px); line-height: 1.1; letter-spacing: -.01em; font-weight: 800; }
+p  { font-size: clamp(15px, 2vh, 20px); line-height: 1.5; color: var(--muted); }
+.accent { color: var(--accent); }
+
+/* ---------- capa e encerramento: texto centrado no quadro ---------- */
+.slide-centro {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 50px;
+    text-align: center;
+}
+.slide-centro .marca {
+    font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--mira-text-softer);
+}
+
+/* ---------- slide de conteúdo: título em cima, animação no resto ---------- */
+.slide-main {
+    width: 100%;
+    height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 50px;              /* área segura */
+}
+/* o título fica POR CIMA do palco, que agora passa por baixo dele.
+   z-index 10 é o teto deste template; mira-draw e mira-edit vivem em
+   99998 e acima, e continuam por cima do título de propósito, senão
+   não daria para desenhar nem editar sobre ele. */
+.slide-main h2 {
+    flex: 0 0 auto;
+    margin-bottom: 14px;
+    text-align: center;
+    position: relative;
+    z-index: 10;
+}
+
+/* o palco: O QUADRO INTEIRO, de borda a borda.
+
+   `inset: 0` resolve contra a <section>, porque o .slide-main é
+   estático e a <section> é `position: relative`. Sair do fluxo é o
+   que faz o palco passar POR BAIXO do título em vez de começar
+   depois dele.
+
+   Os resets de fundo e raio não são enfeite. Quando o
+   "new --theme=..." injeta o base.css, ele traz `.anim-stage` com
+   altura fixa (clamp 400-620px), glow radial e cantos arredondados,
+   que é a linguagem de CARD. Aqui o palco É o slide: sem neutralizar
+   isso, o deck gerado sai com uma caixinha arredondada no meio, que
+   é exatamente o que este template existe para não ser. */
+.anim-stage {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    background: none;
+    border-radius: 0;
+}
+.anim-stage svg { width: 100%; height: 100%; display: block; }
+
+/* @MIRA:RESPONSIVE:START */
+/* ============================================================
+   MIRA — responsive.css  (camada de reflow mobile-first)
+   Objetivo: TODO slide 16:9 do Mira vira legível no celular em
+   retrato SEM arquivo mobile separado. O mesmo deck se reorganiza:
+   fontes encolhem, grids empilham, padding reduz, palcos escalam.
+
+   Estratégia: os decks nascem "desktop-first" (classes Tailwind com
+   tamanhos fixos: text-6xl, p-10, ...). Esta camada sobrescreve essas
+   classes abaixo de 640px. Usa !important de propósito — precisa
+   vencer o Tailwind CDN (injetado em runtime) em decks legados sem
+   reescrever o HTML. Os clamps têm teto ~= valor desktop, então em
+   telas largas nada muda; só encolhem no estreito.
+   ============================================================ */
+
+/* Guarda universal contra overflow horizontal (o "print cortado" no zap). */
+html, body { max-width: 100%; overflow-x: hidden; }
+img, svg, video, canvas, iframe, table, pre { max-width: 100%; }
+
+@media (max-width: 640px) {
+
+  /* --- Tipografia fluida: encolhe títulos gigantes no celular --- */
+  .text-9xl { font-size: clamp(3rem, 12vw, 5rem)      !important; line-height: 1.05 !important; }
+  .text-8xl { font-size: clamp(2.75rem, 11vw, 4.5rem) !important; line-height: 1.06 !important; }
+  .text-7xl { font-size: clamp(2.25rem, 10vw, 3.75rem)!important; line-height: 1.08 !important; }
+  .text-6xl { font-size: clamp(2rem, 9vw, 3rem)       !important; line-height: 1.1  !important; }
+  .text-5xl { font-size: clamp(1.75rem, 8vw, 2.5rem)  !important; line-height: 1.12 !important; }
+  .text-4xl { font-size: clamp(1.5rem, 7vw, 2rem)     !important; line-height: 1.15 !important; }
+  .text-3xl { font-size: clamp(1.35rem, 6vw, 1.75rem) !important; line-height: 1.2  !important; }
+  .text-2xl { font-size: clamp(1.2rem, 5vw, 1.5rem)   !important; line-height: 1.25 !important; }
+  .text-xl  { font-size: clamp(1.05rem, 4.5vw, 1.25rem)!important; line-height: 1.3 !important; }
+
+  /* Títulos: quebram entre palavras; só partem uma palavra se ela sozinha
+     estourar a largura. Sem hyphens:auto — em PT ele hifena no meio
+     ("pode-rosas") e fica feio em título de display. */
+  h1, h2, h3 { overflow-wrap: break-word; }
+
+  /* --- Espaçamento: paddings de desktop sufocam o celular --- */
+  .p-12 { padding: 1.25rem !important; }
+  .p-10 { padding: 1.15rem !important; }
+  .p-8  { padding: 1.05rem !important; }
+  .px-12, .px-10 { padding-left: 1.15rem !important; padding-right: 1.15rem !important; }
+  .px-8 { padding-left: 1rem !important; padding-right: 1rem !important; }
+  .py-16 { padding-top: 2.5rem !important; padding-bottom: 2.5rem !important; }
+  .gap-8 { gap: 1rem !important; }
+  .gap-10, .gap-12 { gap: 1.25rem !important; }
+
+  /* --- Layout: seção de slide sempre alcançável pelo topo ---
+     min-h-screen + justify-center clipa o topo quando o conteúdo é
+     maior que a tela. No celular, ancora no topo e deixa rolar. */
+  .min-h-screen {
+    min-height: 100dvh !important;
+    height: auto !important;
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+  }
+  .min-h-screen.justify-center,
+  .min-h-screen.items-center { justify-content: flex-start !important; }
+
+  /* --- Grids/flex de 2+ colunas empilham (redundante ao md: do
+         Tailwind, mas cobre grids sem breakpoint declarado). --- */
+  .grid-cols-2, .grid-cols-3, .grid-cols-4 { grid-template-columns: 1fr !important; }
+
+  /* --- Palco de animação (D3/SVG/canvas): nunca estoura a largura,
+         mantém proporção e encolhe a altura. --- */
+  .anim-stage {
+    max-width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 16 / 9;
+    min-height: 0 !important;
+  }
+
+  /* --- Tabelas: fonte menor + rolagem horizontal se precisar. --- */
+  table { font-size: 0.82rem !important; }
+  .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+
+  /* --- Controles flutuantes respeitam a safe-area do iPhone. --- */
+  #mira-next, #next-card {
+    bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+    right: max(1rem, env(safe-area-inset-right)) !important;
+    width: 44px !important; height: 44px !important;
+  }
+}
+/* @MIRA:RESPONSIVE:END */
+</style>
+</head>
+<body>
+
+<!-- === SLIDE 1 · CAPA === -->
+<section>
+    <div class="slide-centro">
+        <span class="marca">Programação em Python · Módulo 06 · ITEAM Boa Vista</span>
+        <h1>Aula 03: o programa <span class="accent">decide</span></h1>
+        <p>Cinco metáforas para as escolhas que um programa faz.</p>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>O recuo é <span class="accent">o cordão</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-cordao" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>Para na primeira <span class="accent">que serve</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-moedas" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>elif ou <span class="accent">vários if</span>?</h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-carimbos" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>and pede <span class="accent">as duas chaves</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-cofre" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>Vazio é <span class="accent">falso</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-caixas" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<!-- === ENCERRAMENTO === -->
+<section>
+    <div class="slide-centro">
+        <span class="marca">Próxima aula · 05/11</span>
+        <h2>Repetição e <span class="accent">exceções</span></h2>
+        <p>Agora o programa decide. Na próxima, ele aprende a repetir e a se recuperar de erros.</p>
+    </div>
+</section>
+
+<script>
+/* ==============================================================
+   Aula 03 · O programa decide: cinco metáforas animadas.
+
+   Cada cena é uma função do tempo dentro do ciclo (t, em segundos):
+   o regente zera o relógio quando o slide entra, então a turma
+   sempre vê a história desde o começo. Todo texto de código e de
+   saída abaixo é o que o Python 3.12 realmente executa e imprime
+   (conferido no aula_03.py da Turma 2).
+   ============================================================== */
+(function () {
+    'use strict';
+
+    /* A cor sai do TEMA, nunca fixa no código. */
+    function cor(nome, reserva) {
+        var v = getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+        return v || reserva;
+    }
+    var COR = {
+        marca: cor('--mira-primary', '#5B9BF5'),
+        acento: cor('--mira-accent-2', '#94BEF9'),
+        tinta: cor('--mira-text', '#ffffff'),
+        fundo: cor('--mira-bg', '#000000'),
+        ok: cor('--mira-crop', '#35D07F'),
+        erro: '#FF6B6B',                       /* só para erro, nunca decoração */
+        suave: 'rgba(255,255,255,.66)',
+        fraco: 'rgba(255,255,255,.32)',
+        linha: 'rgba(255,255,255,.14)',
+        painel: 'rgba(255,255,255,.045)',
+        papel: '#F4F7FC',
+        escuro: '#0B1220'
+    };
+    var MONO = "Consolas, 'Cascadia Mono', 'JetBrains Mono', 'DejaVu Sans Mono', monospace";
+    var SANS = "'Inter', system-ui, sans-serif";
+
+    /* ---------- regente (do template mira-default) ---------- */
+    function reger(svgId, quadro) {
+        var svg = document.getElementById(svgId);
+        var slide = svg && svg.closest('section');
+        if (!slide || typeof IntersectionObserver !== 'function') {
+            d3.timer(function (ms) { quadro(ms); });
+            return;
+        }
+        var relogio = null, visivel = false;
+        d3.timer(function (ms) {
+            if (!visivel) { quadro(0); return; }
+            if (relogio === null) relogio = ms;
+            quadro(ms - relogio);
+        });
+        new IntersectionObserver(function (entradas) {
+            entradas.forEach(function (e) {
+                if (e.isIntersecting === visivel) return;
+                visivel = e.isIntersecting;
+                relogio = null;
+            });
+        }, { threshold: 0.6 }).observe(slide);
+    }
+
+    /* ---------- palco (do template mira-default) ---------- */
+    function palco(svgId) {
+        var svg = d3.select('#' + svgId);
+        if (svg.empty()) return null;
+        var caixa = svg.node().closest('.anim-stage');
+        var secao = caixa && caixa.closest ? caixa.closest('section') : null;
+        var titulo = secao && secao.querySelector
+            ? secao.querySelector('.slide-main h2, .slide-main h1')
+            : null;
+        var RESPIRO = 18;
+        var F = { W: 960, H: 460, topo: 0, alturaUtil: 460 };
+        F.vy = function (k) { return F.topo + F.alturaUtil * k; };
+
+        function casar() {
+            var r = caixa.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) F.H = Math.round(F.W * r.height / r.width);
+            svg.attr('viewBox', '0 0 ' + F.W + ' ' + F.H);
+            F.topo = 0;
+            if (titulo && titulo.getBoundingClientRect && r.height > 0) {
+                var t = titulo.getBoundingClientRect();
+                var basePx = Math.max(0, (t.bottom || 0) - (r.top || 0));
+                F.topo = Math.round(F.H * basePx / r.height) + RESPIRO;
+                F.topo = Math.min(F.topo, Math.round(F.H * 0.40));
+            }
+            F.alturaUtil = F.H - F.topo;
+        }
+        casar();
+        window.addEventListener('resize', casar);
+        svg.selectAll('*').remove();
+        return { svg: svg, F: F };
+    }
+
+    /* ---------- tempo ---------- */
+    function lim(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+    function fase(t, a, b) { return lim((t - a) / (b - a)); }
+    function mix(a, b, k) { return a + (b - a) * k; }
+    /* aparece em a, some em b, com rampas de r segundos */
+    function janela(t, a, b, r) { r = r || .3; return Math.min(fase(t, a, a + r), 1 - fase(t, b - r, b)); }
+    /* deslocamento de objeto: explode e assenta com cauda longa */
+    var EA = (window.miraMotionBlur && window.miraMotionBlur.explodeAssenta)
+        ? window.miraMotionBlur.explodeAssenta(.45, 9) : d3.easeCubicOut;
+    var SUAVE = d3.easeSinInOut;
+    /* quadros-chave [[t, v], ...] com explode-assenta entre eles */
+    function kf(t, lista) {
+        if (t <= lista[0][0]) return lista[0][1];
+        for (var i = 1; i < lista.length; i++) {
+            if (t <= lista[i][0]) {
+                var a = lista[i - 1], b = lista[i];
+                return mix(a[1], b[1], EA(fase(t, a[0], b[0])));
+            }
+        }
+        return lista[lista.length - 1][1];
+    }
+    /* texto sendo digitado: corta a string pelo progresso */
+    function digitado(texto, k) { return texto.slice(0, Math.round(texto.length * lim(k))); }
+
+    /* ---------- cena: monta uma vez, refaz se o palco mudar de tamanho ---------- */
+    function cena(svgId, cicloMs, construir) {
+        var p = palco(svgId); if (!p) return;
+        var chave = null, quadro = null, raiz = null;
+        reger(svgId, function (ms) {
+            var k = p.F.H + '|' + p.F.topo;
+            if (k !== chave) {
+                chave = k;
+                p.svg.selectAll('*').remove();
+                raiz = p.svg.append('g');
+                quadro = construir(raiz, p.F);
+            }
+            /* entrada coreografada: a cena sobe e acende no primeiro segundo */
+            var e = d3.easeCubicOut(fase(ms, 0, 900));
+            raiz.attr('opacity', e).attr('transform', 'translate(0,' + (1 - e) * 14 + ')');
+            quadro((ms % cicloMs) / 1000, ms / 1000);
+        });
+    }
+
+    /* ---------- peças comuns ---------- */
+    function rotulo(g, x, y, texto, ancora) {
+        return g.append('text').attr('x', x).attr('y', y)
+            .attr('text-anchor', ancora || 'start')
+            .attr('font-family', SANS).attr('font-size', 12).attr('font-weight', 700)
+            .attr('letter-spacing', '.14em').attr('fill', COR.fraco).text(texto.toUpperCase());
+    }
+    function painel(g, x, y, w, h, titulo, escuro) {
+        var p = g.append('g').attr('transform', 'translate(' + x + ',' + y + ')');
+        p.append('rect').attr('width', w).attr('height', h).attr('rx', 12)
+            .attr('fill', escuro ? 'rgba(5,9,18,.92)' : COR.painel)
+            .attr('stroke', COR.linha);
+        if (titulo) rotulo(p, 4, -10, titulo);
+        return p;
+    }
+    /* bloco de código numerado, com faixa de realce que anda de linha em linha */
+    function codigo(g, x, y, w, linhas, tam, titulo) {
+        var lh = Math.round(tam * 1.7), h = linhas.length * lh + 20;
+        var p = painel(g, x, y, w, h, titulo);
+        var realce = p.append('rect').attr('x', 6).attr('width', w - 12).attr('height', lh)
+            .attr('rx', 6).attr('opacity', 0);
+        var txt = linhas.map(function (l, i) {
+            var yy = 10 + i * lh + lh * .68;
+            p.append('text').attr('x', 14).attr('y', yy).attr('font-family', MONO)
+                .attr('font-size', tam * .8).attr('fill', COR.fraco).text(i + 1);
+            return p.append('text').attr('x', 40).attr('y', yy).attr('font-family', MONO)
+                .attr('font-size', tam).attr('fill', COR.tinta).attr('xml:space', 'preserve').text(l);
+        });
+        return {
+            h: h, lh: lh, g: p, linhas: txt,
+            yLinha: function (i) { return y + 10 + i * lh + lh / 2; },
+            realce: function (i, k, c) {
+                if (i < 0 || k <= 0) { realce.attr('opacity', 0); return; }
+                realce.attr('y', 10 + i * lh).attr('fill', c || COR.marca).attr('opacity', .26 * k);
+            }
+        };
+    }
+    /* terminal com n linhas, cada uma ligada e desligada por quadro */
+    function terminal(g, x, y, w, n, tam, titulo) {
+        var lh = Math.round(tam * 1.75), h = n * lh + 20;
+        var p = painel(g, x, y, w, h, titulo || 'terminal', true);
+        var ls = [];
+        for (var i = 0; i < n; i++) {
+            ls.push(p.append('text').attr('x', 14).attr('y', 10 + i * lh + lh * .68)
+                .attr('font-family', MONO).attr('font-size', tam).attr('xml:space', 'preserve')
+                .attr('fill', COR.tinta).attr('opacity', 0));
+        }
+        var cursor = p.append('rect').attr('width', tam * .55).attr('height', tam * 1.1)
+            .attr('fill', COR.tinta).attr('opacity', 0);
+        return {
+            h: h, lh: lh,
+            set: function (i, texto, op, c) {
+                ls[i].text(texto).attr('opacity', op).attr('fill', c || COR.tinta);
+            },
+            /* cursor piscando logo depois do texto da linha i */
+            cursor: function (i, chars, op) {
+                cursor.attr('x', 14 + chars * tam * .55 + 2).attr('y', 10 + i * lh + lh * .68 - tam * .9)
+                    .attr('opacity', op);
+            }
+        };
+    }
+    /* engrenagem flat, desenhada centrada em (0,0) */
+    function pathEngrenagem(r, dentes) {
+        var pts = [], n = dentes * 4;
+        for (var i = 0; i < n; i++) {
+            var a = i / n * Math.PI * 2, rr = (i % 4 < 2) ? r : r * .78;
+            pts.push([Math.cos(a) * rr, Math.sin(a) * rr]);
+        }
+        return 'M' + pts.map(function (q) { return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join('L') + 'Z';
+    }
+    function largMono(texto, tam) { return texto.length * tam * .6; }
+
+    /* largura real de um caractere mono, medida no navegador */
+    function medirMono(g, tam) {
+        var t = g.append('text').attr('font-family', MONO).attr('font-size', tam).attr('opacity', 0).text('0123456789');
+        var w = t.node().getComputedTextLength ? t.node().getComputedTextLength() / 10 : tam * .6;
+        t.remove();
+        return w || tam * .6;
+    }
+
+    /* ================================================================
+       2. O RECUO É O CORDÃO · a área VIP da festa
+       Causa: as linhas recuadas pertencem ao bloco do if ou do else e só
+       rodam naquele caminho; a linha sem recuo roda para todo mundo.
+       Loop: o convidado de 15 anos é barrado e mesmo assim ganha a
+       pulseira; a linha entra no cordão do if e a pulseira some dele.
+       ================================================================ */
+    function cenaCordao(svgId) {
+        cena(svgId, 14000, function (raiz, F) {
+            var X0 = 36, Y0 = F.vy(.04), W = 440, tam = 15, lh = 26;
+            var CW = medirMono(raiz, tam);
+            var LINHAS = [['idade = int(input("Idade: "))', 0], ['', 0], ['if idade >= 18:', 0],
+                ['print("Entrada liberada")', 4], ['else:', 0], ['print("Entrada negada")', 4],
+                ['print("Pulseira VIP entregue")', 0]];
+            var p = painel(raiz, X0, Y0, W, 7 * lh + 20, 'o programa');
+            var realce = p.append('rect').attr('x', 6).attr('width', W - 12).attr('height', lh).attr('rx', 6)
+                .attr('fill', COR.marca).attr('opacity', 0);
+            for (var n = 0; n < 7; n++) {
+                p.append('text').attr('x', 14).attr('y', 10 + n * lh + lh * .68).attr('font-family', MONO)
+                    .attr('font-size', tam * .8).attr('fill', COR.fraco).text(n + 1);
+            }
+            var cordoes = [0, 1].map(function () {
+                var g = p.append('g');
+                var r = g.append('rect').attr('rx', 8).attr('fill', 'rgba(148,190,249,.06)').attr('stroke', COR.acento)
+                    .attr('stroke-width', 3).attr('stroke-dasharray', '2 7').attr('stroke-linecap', 'round');
+                var postes = [0, 1, 2, 3].map(function () { return g.append('circle').attr('r', 4.5).attr('fill', COR.acento); });
+                return { r: r, postes: postes };
+            });
+            var txt = LINHAS.map(function (l) {
+                return p.append('text').attr('font-family', MONO).attr('font-size', tam).attr('fill', COR.tinta).text(l[0]);
+            });
+            var term = terminal(raiz, X0, Y0 + 7 * lh + 20 + 40, W, 2, 15);
+            var yLeg = Y0 + 7 * lh + 20 + 40 + term.h + 30;
+            var legErro = raiz.append('text').attr('x', X0).attr('y', yLeg).attr('font-family', SANS).attr('font-size', 14)
+                .attr('font-style', 'italic').attr('fill', COR.erro).attr('opacity', 0)
+                .text('a linha 7 está fora do cordão: roda para todo mundo');
+            var legOk = raiz.append('text').attr('x', X0).attr('y', yLeg).attr('font-family', SANS).attr('font-size', 14)
+                .attr('font-style', 'italic').attr('fill', COR.acento).attr('opacity', 0)
+                .text('dentro do cordão do if: pulseira só para quem entrou');
+
+            /* a festa: fila, porta, área VIP e lado de fora */
+            var yMid = F.vy(.52), xFila = 525, xPorta = 615;
+            raiz.append('rect').attr('x', xPorta - 6).attr('y', yMid - 70).attr('width', 12).attr('height', 140).attr('rx', 4).attr('fill', COR.suave);
+            rotulo(raiz, xPorta, yMid + 92, 'porta', 'middle');
+            var vip = { x: 690, y: F.vy(.04), w: 245, h: F.vy(.44) - F.vy(.04) };
+            var fora = { x: 690, y: F.vy(.62), w: 245, h: F.vy(.98) - F.vy(.62) };
+            raiz.append('rect').attr('x', vip.x).attr('y', vip.y).attr('width', vip.w).attr('height', vip.h).attr('rx', 14)
+                .attr('fill', 'rgba(148,190,249,.07)').attr('stroke', COR.acento).attr('stroke-width', 3)
+                .attr('stroke-dasharray', '2 7').attr('stroke-linecap', 'round');
+            rotulo(raiz, vip.x + vip.w / 2, vip.y + 24, 'área VIP (bloco do if)', 'middle');
+            raiz.append('rect').attr('x', fora.x).attr('y', fora.y).attr('width', fora.w).attr('height', fora.h).attr('rx', 14)
+                .attr('fill', 'rgba(255,255,255,.03)').attr('stroke', COR.linha);
+            rotulo(raiz, fora.x + fora.w / 2, fora.y + 24, 'barrados (bloco do else)', 'middle');
+
+            function ingresso(idade) {
+                var g = raiz.append('g').attr('opacity', 0);
+                g.append('rect').attr('x', -50).attr('y', -30).attr('width', 100).attr('height', 60).attr('rx', 8).attr('fill', COR.papel);
+                g.append('line').attr('x1', 22).attr('x2', 22).attr('y1', -26).attr('y2', 26).attr('stroke', '#C9D3E3').attr('stroke-dasharray', '3 3');
+                g.append('text').attr('x', -10).attr('y', 8).attr('text-anchor', 'middle').attr('font-family', SANS)
+                    .attr('font-size', 22).attr('font-weight', 800).attr('fill', COR.escuro).text(idade);
+                g.append('text').attr('x', -10).attr('y', 24).attr('text-anchor', 'middle').attr('font-family', SANS)
+                    .attr('font-size', 10).attr('fill', '#5A6880').text('anos');
+                var pulseira = g.append('g').attr('opacity', 0);
+                pulseira.append('rect').attr('x', 28).attr('y', -34).attr('width', 16).attr('height', 68).attr('rx', 5).attr('fill', COR.acento);
+                pulseira.append('text').attr('x', 36).attr('y', 4).attr('text-anchor', 'middle').attr('font-family', SANS)
+                    .attr('font-size', 9).attr('font-weight', 800).attr('fill', COR.escuro)
+                    .attr('transform', 'rotate(-90,36,0)').text('VIP');
+                return { g: g, pulseira: pulseira };
+            }
+            var A = ingresso('20'), B = ingresso('15');
+            var alerta = raiz.append('text').attr('font-family', SANS).attr('font-size', 26).attr('font-weight', 800)
+                .attr('fill', COR.erro).attr('opacity', 0).text('?!');
+
+            function caminho(t, ini, alvo, tEnt, tSai) {
+                var k1 = EA(fase(t, tEnt, tEnt + .8)), k2 = EA(fase(t, tSai, tSai + .8));
+                var x = mix(mix(xFila - 60, xPorta, k1), alvo.x, k2), y = mix(yMid, alvo.y, k2);
+                return { x: x, y: y };
+            }
+
+            return function (t) {
+                var some = 1 - fase(t, 12.4, 13.2);
+                /* a correção: a linha da pulseira entra no cordão do if */
+                var f = EA(fase(t, 8.2, 9.2)) * (1 - EA(fase(t, 12.4, 13.2)));
+                function slot(i) { return i < 4 ? i : i === 4 ? mix(4, 5, f) : i === 5 ? mix(5, 6, f) : mix(6, 4, f); }
+                function yb(s) { return 10 + s * lh + lh * .68; }
+                txt.forEach(function (el, i) {
+                    var ind = i === 6 ? 4 * f : LINHAS[i][1];
+                    el.attr('x', 40 + ind * CW).attr('y', yb(slot(i)));
+                });
+                /* os cordões contornam exatamente as linhas recuadas */
+                [[3, 3 + f], [slot(5), slot(5)]].forEach(function (s, j) {
+                    var x = 40 + 4 * CW - 8, y = 10 + s[0] * lh + 1, w = W - 12 - x, h = (s[1] - s[0] + 1) * lh - 2;
+                    var c = cordoes[j];
+                    c.r.attr('x', x).attr('y', y).attr('width', w).attr('height', h);
+                    [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(function (q, k) { c.postes[k].attr('cx', q[0]).attr('cy', q[1]); });
+                });
+
+                /* linha em execução */
+                var r = -1, kr = 0;
+                [[2, 1.6, 2.2], [3, 2.2, 3.0], [6, 3.2, 3.9], [2, 5.2, 5.8], [4, 5.8, 6.2], [5, 6.2, 6.8], [6, 6.9, 7.7]]
+                    .forEach(function (l) { if (t >= l[1] && t < l[2]) { r = l[0]; kr = janela(t, l[1], l[2], .15); } });
+                realce.attr('y', 10 + slot(Math.max(0, r)) * lh).attr('opacity', r < 0 ? 0 : .26 * kr);
+
+                /* convidado de 20: entra na área VIP e ganha a pulseira */
+                var pa = caminho(t, null, { x: vip.x + vip.w / 2, y: vip.y + vip.h * .6 }, .6, 2.3);
+                A.g.attr('transform', 'translate(' + pa.x + ',' + pa.y + ')').attr('opacity', fase(t, .6, .8) * some);
+                A.pulseira.attr('opacity', fase(t, 3.4, 3.6));
+                /* convidado de 15: barrado... e mesmo assim ganha a pulseira */
+                var pb = caminho(t, null, { x: fora.x + fora.w / 2, y: fora.y + fora.h * .6 }, 4.3, 5.9);
+                B.g.attr('transform', 'translate(' + pb.x + ',' + pb.y + ')').attr('opacity', fase(t, 4.3, 4.5) * some);
+                B.pulseira.attr('opacity', fase(t, 7.2, 7.4) * (1 - fase(t, 9.8, 10.3)));
+                alerta.attr('x', pb.x + 58).attr('y', pb.y - 26).attr('opacity', janela(t, 7.4, 9.8, .25));
+
+                /* o terminal mostra o que cada convidado gerou */
+                if (t < 4.2) {
+                    var limpa = 1 - fase(t, 4.0, 4.2);
+                    term.set(0, 'Entrada liberada', fase(t, 2.9, 3.1) * limpa);
+                    term.set(1, 'Pulseira VIP entregue', fase(t, 3.7, 3.9) * limpa);
+                } else {
+                    term.set(0, 'Entrada negada', fase(t, 6.5, 6.7) * some);
+                    term.set(1, 'Pulseira VIP entregue', fase(t, 7.4, 7.6) * (1 - fase(t, 9.8, 10.3)), COR.erro);
+                }
+                legErro.attr('opacity', janela(t, 7.5, 8.9, .3));
+                legOk.attr('opacity', janela(t, 9.4, 12.6, .3));
+            };
+        });
+    }
+
+    /* ================================================================
+       3. PARA NA PRIMEIRA QUE SERVE · o separador de moedas
+       Causa: o if/elif/else testa de cima para baixo e para na primeira
+       condição verdadeira; uma condição mais ampla antes rouba o caso.
+       Loop: a moeda 9.5 cai em "Excelente"; com os buracos trocados, a
+       mesma moeda cai em "Aprovado" e o buraco certo nunca é testado.
+       ================================================================ */
+    function cenaMoedas(svgId) {
+        cena(svgId, 13000, function (raiz, F) {
+            var xa = 60, ya = F.vy(.10), xb = 930, yb2 = F.vy(.28);
+            function yRampa(x) { return mix(ya, yb2, (x - xa) / (xb - xa)); }
+            raiz.append('line').attr('x1', xa).attr('y1', ya + 26).attr('x2', xb).attr('y2', yb2 + 26)
+                .attr('stroke', COR.suave).attr('stroke-width', 6).attr('stroke-linecap', 'round');
+            var furos = [260, 470, 680], xElse = 880;
+            var CONDS = ['nota >= 9', 'nota >= 7', 'nota >= 5'], SAIDAS = ['Excelente', 'Aprovado', 'Recuperação'];
+            var buracos = furos.map(function (x, i) {
+                var y = yRampa(x) + 26;
+                raiz.append('rect').attr('x', x - 34).attr('y', y - 5).attr('width', 68).attr('height', 10).attr('fill', COR.fundo);
+                var luz = raiz.append('rect').attr('x', x - 34).attr('y', y - 5).attr('width', 68).attr('height', 10).attr('rx', 3)
+                    .attr('fill', COR.acento).attr('opacity', 0);
+                var cond = raiz.append('text').attr('x', x).attr('y', y - 54).attr('text-anchor', 'middle')
+                    .attr('font-family', MONO).attr('font-size', 15).attr('fill', COR.acento).text(CONDS[i]);
+                var cesto = raiz.append('rect').attr('x', x - 62).attr('y', y + 26).attr('width', 124).attr('height', 74).attr('rx', 10)
+                    .attr('fill', 'rgba(91,155,245,.08)').attr('stroke', COR.marca).attr('stroke-width', 2);
+                var nome = raiz.append('text').attr('x', x).attr('y', y + 122).attr('text-anchor', 'middle')
+                    .attr('font-family', MONO).attr('font-size', 15).attr('fill', COR.tinta).text('"' + SAIDAS[i] + '"');
+                var nunca = raiz.append('text').attr('x', x).attr('y', y - 80).attr('text-anchor', 'middle')
+                    .attr('font-family', SANS).attr('font-size', 12).attr('font-style', 'italic')
+                    .attr('fill', COR.suave).attr('opacity', 0).text('nem chega a ser testado');
+                return { x: x, y: y, luz: luz, cond: cond, cesto: cesto, nome: nome, nunca: nunca };
+            });
+            var yE = yRampa(xElse) + 26;
+            raiz.append('rect').attr('x', xElse - 46).attr('y', yE + 26).attr('width', 92).attr('height', 74).attr('rx', 10)
+                .attr('fill', 'rgba(255,255,255,.04)').attr('stroke', COR.linha);
+            raiz.append('text').attr('x', xElse).attr('y', yE - 54).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 15).attr('fill', COR.suave).text('else');
+            raiz.append('text').attr('x', xElse).attr('y', yE + 122).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 13).attr('fill', COR.suave).text('"Reprovado"');
+
+            var moeda = raiz.append('g');
+            moeda.append('circle').attr('r', 24).attr('fill', COR.acento).attr('stroke', COR.marca).attr('stroke-width', 3);
+            var moedaTxt = moeda.append('text').attr('y', 6).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 16).attr('font-weight', 800).attr('fill', COR.escuro).text('9.5');
+            var legenda = raiz.append('text').attr('x', 36).attr('y', F.vy(.96)).attr('font-family', SANS).attr('font-size', 15)
+                .attr('fill', COR.suave);
+            var term = terminal(raiz, 600, F.vy(.80), 330, 1, 18);
+
+            /* a moeda rola até o primeiro buraco em que cabe e cai no cesto */
+            function rodada(t, t0) {
+                var k = d3.easeQuadIn(fase(t, t0, t0 + 1.6));
+                var x = mix(xa + 30, furos[0], k), y = yRampa(x);
+                var cai = d3.easeQuadIn(fase(t, t0 + 1.8, t0 + 2.3));
+                y = mix(y, furos[0] && buracos[0].y + 64, cai);
+                moeda.attr('transform', 'translate(' + x + ',' + y + ') rotate(' + (x - xa) * 1.6 + ')')
+                    .attr('opacity', fase(t, t0 - .2, t0) * (1 - fase(t, t0 + 3.4, t0 + 3.8)));
+                return janela(t, t0 + 1.5, t0 + 3.6, .15);
+            }
+
+            return function (t) {
+                /* a troca: a condição mais ampla passa para o primeiro buraco */
+                var troca = SUAVE(fase(t, 4.6, 5.6)) * (1 - SUAVE(fase(t, 10.8, 11.8)));
+                /* rótulos trocam de buraco acompanhando a altura da rampa */
+                var b0 = buracos[0], b1 = buracos[1];
+                b0.cond.attr('x', mix(b0.x, b1.x, troca)).attr('y', mix(b0.y, b1.y, troca) - 54);
+                b1.cond.attr('x', mix(b1.x, b0.x, troca)).attr('y', mix(b1.y, b0.y, troca) - 54);
+                b0.nome.attr('x', mix(b0.x, b1.x, troca)).attr('y', mix(b0.y, b1.y, troca) + 122);
+                b1.nome.attr('x', mix(b1.x, b0.x, troca)).attr('y', mix(b1.y, b0.y, troca) + 122);
+                var segunda = t >= 5.6 && t < 11.0;
+                var acende = t < 4.6 ? rodada(t, .8) : rodada(t, 6.2);
+                buracos[0].luz.attr('opacity', acende);
+                buracos[0].cesto.attr('fill', 'rgba(91,155,245,' + (.08 + .3 * acende) + ')');
+                buracos[1].nunca.attr('x', furos[1]).attr('opacity', segunda ? fase(t, 8.4, 8.8) * (1 - fase(t, 10.6, 11.0)) : 0);
+                if (t < 4.6) {
+                    term.set(0, 'Excelente', fase(t, 3.2, 3.4) * (1 - fase(t, 4.4, 4.6)), COR.acento);
+                    legenda.text('if nota >= 9 · elif nota >= 7 · elif nota >= 5 · else').attr('opacity', fase(t, .2, .5) * (1 - fase(t, 4.4, 4.6)));
+                } else {
+                    term.set(0, 'Aprovado', fase(t, 8.6, 8.8) * (1 - fase(t, 10.8, 11.2)), COR.erro);
+                    legenda.text('ordem trocada: if nota >= 7 vem antes de nota >= 9').attr('opacity', fase(t, 5.2, 5.6) * (1 - fase(t, 10.8, 11.2)));
+                }
+            };
+        });
+    }
+
+    /* ================================================================
+       4. ELIF OU VÁRIOS IF? · balcão de carimbos x guichê único
+       Causa: if soltos são todos testados e cada verdadeiro executa;
+       na cadeia com elif, só o primeiro verdadeiro executa.
+       Loop: a ficha 9.5 sai do balcão com três carimbos contraditórios;
+       no guichê elif sai com um só.
+       ================================================================ */
+    function cenaCarimbos(svgId) {
+        cena(svgId, 14000, function (raiz, F) {
+            var mesasX = [200, 345, 490, 635];
+            function faixa(y, rotuloTxt, conds) {
+                rotulo(raiz, 36, y - 74, rotuloTxt);
+                raiz.append('line').attr('x1', 60).attr('x2', 720).attr('y1', y + 46).attr('y2', y + 46)
+                    .attr('stroke', COR.linha).attr('stroke-width', 2);
+                return mesasX.map(function (x, i) {
+                    var g = raiz.append('g');
+                    g.append('rect').attr('x', x - 56).attr('y', y + 34).attr('width', 112).attr('height', 12).attr('rx', 4).attr('fill', COR.marca);
+                    var lbl = g.append('text').attr('x', x).attr('y', y + 70).attr('text-anchor', 'middle').attr('font-family', MONO)
+                        .attr('font-size', 13).attr('fill', COR.acento).text(conds[i]);
+                    var carimbo = raiz.append('g');
+                    carimbo.append('circle').attr('cx', 0).attr('cy', -34).attr('r', 9).attr('fill', COR.acento);
+                    carimbo.append('rect').attr('x', -4).attr('y', -28).attr('width', 8).attr('height', 16).attr('fill', COR.acento);
+                    carimbo.append('rect').attr('x', -18).attr('y', -12).attr('width', 36).attr('height', 12).attr('rx', 3).attr('fill', COR.marca);
+                    var nao = raiz.append('text').attr('x', x + 50).attr('y', y - 2).attr('text-anchor', 'middle').attr('font-family', SANS)
+                        .attr('font-size', 20).attr('font-weight', 800).attr('fill', COR.suave).attr('opacity', 0).text('×');
+                    return { g: g, x: x, carimbo: carimbo, nao: nao, lbl: lbl };
+                });
+            }
+            var y1 = F.vy(.20), y2 = F.vy(.70);
+            var M1 = faixa(y1, 'vários if soltos', ['if nota >= 9', 'if nota >= 7', 'if nota >= 5', 'if nota < 5']);
+            var M2 = faixa(y2, 'if + elif + else', ['if nota >= 9', 'elif nota >= 7', 'elif nota >= 5', 'else']);
+            var t1 = terminal(raiz, 760, y1 - 30, 175, 3, 14), t2 = terminal(raiz, 760, y2 - 30, 175, 3, 14);
+
+            function ficha() {
+                var g = raiz.append('g').attr('opacity', 0);
+                g.append('rect').attr('x', -40).attr('y', -30).attr('width', 80).attr('height', 64).attr('rx', 4).attr('fill', COR.papel);
+                g.append('text').attr('y', -10).attr('text-anchor', 'middle').attr('font-family', SANS).attr('font-size', 12)
+                    .attr('font-weight', 700).attr('fill', COR.escuro).text('nota 9.5');
+                var marcas = [0, 1, 2].map(function (i) {
+                    return g.append('rect').attr('x', -30 + i * 6).attr('y', 0 + i * 9).attr('width', 54).attr('height', 12).attr('rx', 2)
+                        .attr('fill', 'none').attr('stroke', i === 2 ? COR.erro : COR.marca).attr('stroke-width', 2)
+                        .attr('transform', 'rotate(' + (-8 + i * 7) + ')').attr('opacity', 0);
+                });
+                return { g: g, marcas: marcas };
+            }
+            var f1 = ficha(), f2 = ficha();
+            var aviso1 = raiz.append('text').attr('x', 400).attr('y', y1 + 104).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 15).attr('font-weight', 700).attr('fill', COR.erro).attr('opacity', 0).text('três carimbos para uma nota só');
+            var aviso2 = raiz.append('text').attr('x', 400).attr('y', y2 + 104).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 15).attr('font-weight', 700).attr('fill', COR.acento).attr('opacity', 0).text('elif: atendeu no primeiro, foi embora');
+
+            /* golpe de carimbo: sobe (antecipa), desce, toca, volta */
+            function golpe(m, y, t, a) {
+                var k = t < a ? 0 : t < a + .12 ? -.25 * fase(t, a, a + .12) : t < a + .3 ? SUAVE(fase(t, a + .12, a + .3)) : 1 - SUAVE(fase(t, a + .35, a + .6));
+                m.carimbo.attr('transform', 'translate(' + m.x + ',' + (y - 50 + 44 * Math.max(-.3, k)) + ')');
+            }
+
+            return function (t) {
+                var some = 1 - fase(t, 12.2, 13.0);
+                /* faixa 1: a ficha passa por TODAS as mesas */
+                var x1 = kf(t, [[.7, 80], [1.4, 200], [2.1, 200], [2.6, 345], [3.3, 345], [3.8, 490], [4.5, 490], [5.0, 635], [5.6, 635]]);
+                f1.g.attr('transform', 'translate(' + x1 + ',' + (y1 + 2) + ')').attr('opacity', fase(t, .5, .7) * some);
+                [1.5, 2.7, 3.9].forEach(function (a, i) {
+                    golpe(M1[i], y1, t, a);
+                    f1.marcas[i].attr('opacity', fase(t, a + .28, a + .32));
+                    t1.set(i, ['Excelente!', 'Aprovado!', 'Recuperação'][i], fase(t, a + .35, a + .5) * some, i === 2 ? COR.erro : COR.acento);
+                });
+                golpe(M1[3], y1, t, 99);
+                M1[3].nao.attr('opacity', janela(t, 5.1, 5.8, .15));
+                aviso1.attr('opacity', fase(t, 5.8, 6.1) * some);
+
+                /* faixa 2: a ficha é atendida no primeiro guichê e sai */
+                var x2 = kf(t, [[6.8, 80], [7.5, 200]]);
+                var sai = EA(fase(t, 8.3, 9.0));
+                f2.g.attr('transform', 'translate(' + x2 + ',' + (y2 + 2 - 70 * sai) + ') scale(' + (1 - .3 * sai) + ')')
+                    .attr('opacity', fase(t, 6.6, 6.8) * (1 - fase(t, 8.8, 9.0)));
+                golpe(M2[0], y2, t, 7.6);
+                f2.marcas[0].attr('opacity', fase(t, 7.88, 7.92));
+                [1, 2, 3].forEach(function (i) { golpe(M2[i], y2, t, 99); M2[i].g.attr('opacity', 1 - .6 * janela(t, 8.4, 12.2, .3)); });
+                t2.set(0, 'Excelente!', fase(t, 7.95, 8.1) * some, COR.acento);
+                aviso2.attr('opacity', fase(t, 9.2, 9.5) * some);
+            };
+        });
+    }
+
+    /* ================================================================
+       5. AND PEDE AS DUAS CHAVES · o cofre com duas fechaduras
+       Causa: and só é True quando as duas condições são verdadeiras;
+       uma falsa basta para negar.
+       Loop: admin / 0000: a chave 1 gira, a 2 trava e o cofre não
+       abre; com 1234 as duas giram e a porta se abre.
+       ================================================================ */
+    function cenaCofre(svgId) {
+        cena(svgId, 13000, function (raiz, F) {
+            var cod = codigo(raiz, 36, F.vy(.04), 450, [
+                'usuario = input("Usuário: ")', 'senha = input("Senha: ")', '',
+                'if usuario == "admin" and senha == "1234":', '    print("Acesso liberado")', 'else:', '    print("Acesso negado")'], 14, 'o programa');
+            var term = terminal(raiz, 36, F.vy(.04) + cod.h + 40, 450, 3, 15);
+
+            var cx = 540, cy = F.vy(.08), cw = 390, ch = Math.min(F.alturaUtil * .8, 360);
+            raiz.append('rect').attr('x', cx).attr('y', cy).attr('width', cw).attr('height', ch).attr('rx', 18)
+                .attr('fill', '#0b1424').attr('stroke', COR.marca).attr('stroke-width', 3);
+            var interior = raiz.append('rect').attr('x', cx + 24).attr('y', cy + 24).attr('width', cw - 48).attr('height', ch - 48).attr('rx', 10)
+                .attr('fill', 'rgba(148,190,249,.25)').attr('opacity', 0);
+            var dentro = raiz.append('text').attr('x', cx + cw / 2 + 50).attr('y', cy + ch / 2 + 8).attr('text-anchor', 'middle')
+                .attr('font-family', MONO).attr('font-size', 22).attr('font-weight', 700).attr('fill', COR.tinta).attr('opacity', 0)
+                .text('Acesso liberado');
+            var porta = raiz.append('g');
+            porta.append('rect').attr('x', 0).attr('y', 0).attr('width', cw - 48).attr('height', ch - 48).attr('rx', 10)
+                .attr('fill', '#14223a').attr('stroke', COR.acento).attr('stroke-width', 2);
+            var travas = [.32, .68].map(function (k, i) {
+                var y = (ch - 48) * k, g = porta.append('g').attr('transform', 'translate(' + ((cw - 48) / 2 - 40) + ',' + y + ')');
+                var anel = g.append('circle').attr('r', 30).attr('fill', '#0b1424').attr('stroke', COR.suave).attr('stroke-width', 3);
+                g.append('rect').attr('x', -4).attr('y', -14).attr('width', 8).attr('height', 28).attr('rx', 3).attr('fill', COR.fundo);
+                g.append('text').attr('x', 48).attr('y', -4).attr('font-family', MONO).attr('font-size', 13).attr('fill', COR.acento)
+                    .text(i === 0 ? 'usuario == "admin"' : 'senha == "1234"');
+                var res = g.append('text').attr('x', 48).attr('y', 16).attr('font-family', MONO).attr('font-size', 15)
+                    .attr('font-weight', 700).attr('opacity', 0);
+                return { g: g, anel: anel, res: res, y: y };
+            });
+            porta.append('text').attr('x', (cw - 48) / 2).attr('y', ch - 72).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 18).attr('font-weight', 700).attr('fill', COR.acento).text('and');
+
+            function chave(rot) {
+                var g = raiz.append('g').attr('opacity', 0);
+                var gira = g.append('g');
+                gira.append('circle').attr('cx', -70).attr('cy', 0).attr('r', 18).attr('fill', COR.acento);
+                gira.append('circle').attr('cx', -70).attr('cy', 0).attr('r', 7).attr('fill', COR.fundo);
+                gira.append('rect').attr('x', -54).attr('y', -5).attr('width', 54).attr('height', 10).attr('fill', COR.acento);
+                gira.append('path').attr('d', 'M-22,5 v8 h6 v-8 M-10,5 v12 h6 v-12').attr('fill', COR.acento).attr('stroke', COR.acento).attr('stroke-width', 2);
+                var t = g.append('text').attr('x', -70).attr('y', 40).attr('text-anchor', 'middle').attr('font-family', MONO)
+                    .attr('font-size', 14).attr('font-weight', 700).attr('fill', COR.tinta).text(rot);
+                return { g: g, gira: gira, txt: t };
+            }
+            var k1 = chave('"admin"'), k2 = chave('"0000"');
+
+            return function (t) {
+                var some = 1 - fase(t, 11.6, 12.4);
+                var segunda = t >= 6.0;
+                /* a porta: treme quando nega, abre (gira na dobradiça) quando as duas giram */
+                var treme = Math.sin(t * 50) * 4 * janela(t, 4.8, 5.3, .08);
+                var abre = SUAVE(fase(t, 8.8, 9.6)) * (1 - SUAVE(fase(t, 11.6, 12.4)));
+                porta.attr('transform', 'translate(' + (cx + 24 + treme) + ',' + (cy + 24) + ') scale(' + (1 - .82 * abre) + ',1)');
+                interior.attr('opacity', abre);
+                dentro.attr('opacity', fase(abre, .6, 1));
+                porta.attr('opacity', 1 - .45 * abre);
+
+                var px = cx + 24 + (cw - 48) / 2 - 40, ky = [cy + 24 + travas[0].y, cy + 24 + travas[1].y];
+                /* chave 1: sempre "admin", entra e gira */
+                var e1 = EA(fase(t, 1.4, 2.0)) * (1 - EA(fase(t, 6.0, 6.5))) + (segunda ? EA(fase(t, 6.7, 7.2)) : 0);
+                var g1 = SUAVE(fase(t, segunda ? 7.4 : 2.3, segunda ? 7.8 : 2.7)) * (segunda ? 1 : 1 - fase(t, 5.8, 6.0));
+                k1.g.attr('transform', 'translate(' + mix(px - 160, px, e1) + ',' + ky[0] + ')').attr('opacity', fase(t, 1.2, 1.4) * some * (1 - abre));
+                k1.gira.attr('transform', 'rotate(' + 90 * g1 + ',0,0)');
+                travas[0].res.text('True').attr('fill', COR.ok).attr('opacity', Math.max(fase(t, 2.7, 2.9) * (1 - fase(t, 5.8, 6.0)), fase(t, 7.8, 8.0) * some));
+                travas[0].anel.attr('stroke', g1 > .9 ? COR.ok : COR.suave);
+                /* chave 2: "0000" trava; depois chega a "1234" e gira */
+                k2.txt.text(segunda ? '"1234"' : '"0000"');
+                var e2 = segunda ? EA(fase(t, 7.0, 7.5)) : EA(fase(t, 3.0, 3.6)) * (1 - EA(fase(t, 6.0, 6.5)));
+                var tenta = segunda ? 90 * SUAVE(fase(t, 8.1, 8.5)) : 14 * Math.sin(t * 22) * janela(t, 3.9, 4.6, .1);
+                k2.g.attr('transform', 'translate(' + mix(px - 160, px, e2) + ',' + ky[1] + ')').attr('opacity', fase(t, 2.8, 3.0) * some * (1 - abre));
+                k2.gira.attr('transform', 'rotate(' + tenta + ',0,0)');
+                var falso = fase(t, 4.6, 4.8) * (1 - fase(t, 5.8, 6.0));
+                travas[1].res.text(falso > 0 ? 'False' : 'True').attr('fill', falso > 0 ? COR.erro : COR.ok)
+                    .attr('opacity', Math.max(falso, fase(t, 8.5, 8.7) * some));
+                travas[1].anel.attr('stroke', falso > 0 ? COR.erro : (segunda && t > 8.5 ? COR.ok : COR.suave));
+
+                /* o terminal de cada tentativa */
+                if (!segunda) {
+                    var limpa = 1 - fase(t, 5.8, 6.0);
+                    term.set(0, digitado('Usuário: admin', fase(t, .3, .8)), limpa);
+                    term.set(1, digitado('Senha: 0000', fase(t, .9, 1.3)), limpa);
+                    term.set(2, 'Acesso negado', fase(t, 5.2, 5.4) * limpa, COR.erro);
+                    cod.realce(t < 1.3 ? 0 : t < 3.0 ? 3 : 6, janela(t, .2, 5.8, .2));
+                } else {
+                    term.set(0, 'Usuário: admin', fase(t, 6.1, 6.3) * some);
+                    term.set(1, digitado('Senha: 1234', fase(t, 6.3, 6.8)), some);
+                    term.set(2, 'Acesso liberado', fase(t, 9.6, 9.8) * some, COR.ok);
+                    cod.realce(t < 8.8 ? 3 : 4, janela(t, 6.2, 11.6, .2));
+                }
+            };
+        });
+    }
+
+    /* ================================================================
+       6. VAZIO É FALSO · caixas sacudidas na mudança
+       Causa: num if, valores vazios (0, "") contam como falso; qualquer
+       coisa com conteúdo conta como verdadeira, até "0" e "azul".
+       Loop: 0 e "" não fazem barulho, "0" chacoalha; no bug do or, a
+       caixa "azul" sempre chacoalha; trocada por comparação, silencia.
+       ================================================================ */
+    function cenaCaixas(svgId) {
+        cena(svgId, 14000, function (raiz, F) {
+            var codA = codigo(raiz, 36, F.vy(.04), 400, ['saldo = 0', 'mensagem = ""', '', 'if saldo:', '    print("Tem saldo")',
+                'if not mensagem:', '    print("Sem mensagem")', 'if "0":', '    print("Texto \'0\'")'], 14, 'parte 1: truthy e falsy');
+            var codB = codigo(raiz, 36, F.vy(.04), 400, ['cor = "verde"', 'if cor == "rosa" or "azul":', '    print("Cor aceita")',
+                'else:', '    print("Cor recusada")'], 14, 'parte 2: o bug do or');
+            var term = terminal(raiz, 36, F.vy(.04) + codA.h + 40, 400, 2, 15);
+
+            function caixa(x, y, rot, comPapel) {
+                var g = raiz.append('g').attr('transform', 'translate(' + x + ',' + y + ')');
+                var corpo = g.append('g');
+                var papel = corpo.append('rect').attr('x', -16).attr('y', -46).attr('width', 32).attr('height', 22).attr('rx', 2)
+                    .attr('fill', COR.papel).attr('opacity', comPapel ? 1 : 0);
+                corpo.append('rect').attr('x', -48).attr('y', -34).attr('width', 96).attr('height', 70).attr('rx', 6)
+                    .attr('fill', 'rgba(148,190,249,.16)').attr('stroke', COR.acento).attr('stroke-width', 2);
+                corpo.append('path').attr('d', 'M-48,-34 L-62,-50 M48,-34 L62,-50').attr('stroke', COR.acento).attr('stroke-width', 2);
+                corpo.append('line').attr('x1', -48).attr('x2', 48).attr('y1', -6).attr('y2', -6).attr('stroke', 'rgba(148,190,249,.4)').attr('stroke-width', 6);
+                g.append('text').attr('y', 62).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 17)
+                    .attr('font-weight', 700).attr('fill', COR.tinta).text(rot);
+                var ondas = g.append('g').attr('fill', 'none').attr('stroke', COR.acento).attr('stroke-width', 3).attr('opacity', 0);
+                [1, 2].forEach(function (i) {
+                    ondas.append('path').attr('d', 'M' + (56 + i * 12) + ',-24 q' + (10 + i * 4) + ',24 0,48');
+                    ondas.append('path').attr('d', 'M' + (-56 - i * 12) + ',-24 q' + (-10 - i * 4) + ',24 0,48');
+                });
+                var veredito = g.append('text').attr('y', -66).attr('text-anchor', 'middle').attr('font-family', MONO)
+                    .attr('font-size', 15).attr('font-weight', 700).attr('opacity', 0);
+                return { g: g, corpo: corpo, papel: papel, ondas: ondas, veredito: veredito };
+            }
+            var yA = F.vy(.22), yB = F.vy(.70);
+            var cx = [560, 710, 860];
+            var C = [caixa(cx[0], yA, '0', false), caixa(cx[1], yA, '""', false), caixa(cx[2], yA, '"0"', true)];
+            /* parte 2: uma comparação de verdade, o "or", e a caixa "azul" */
+            var comp = raiz.append('g').attr('transform', 'translate(560,' + yB + ')').attr('opacity', 0);
+            comp.append('rect').attr('x', -78).attr('y', -26).attr('width', 156).attr('height', 52).attr('rx', 10)
+                .attr('fill', '#0d1626').attr('stroke', COR.marca).attr('stroke-width', 2);
+            comp.append('text').attr('y', 6).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 15)
+                .attr('fill', COR.tinta).text('cor == "rosa"');
+            var compRes = comp.append('text').attr('y', -40).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 15).attr('font-weight', 700).attr('fill', COR.erro).text('False');
+            var ouTxt = raiz.append('text').attr('x', 680).attr('y', yB + 6).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 20).attr('font-weight', 700).attr('fill', COR.acento).attr('opacity', 0).text('or');
+            var azul = caixa(800, yB, '"azul"', true);
+            var compAzul = raiz.append('g').attr('transform', 'translate(800,' + yB + ')').attr('opacity', 0);
+            compAzul.append('rect').attr('x', -78).attr('y', -26).attr('width', 156).attr('height', 52).attr('rx', 10)
+                .attr('fill', '#0d1626').attr('stroke', COR.marca).attr('stroke-width', 2);
+            compAzul.append('text').attr('y', 6).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 15)
+                .attr('fill', COR.tinta).text('cor == "azul"');
+            var compAzulRes = compAzul.append('text').attr('y', -40).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 15).attr('font-weight', 700).attr('fill', COR.erro).text('False');
+            var nota = raiz.append('text').attr('x', 680).attr('y', yB + 96).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 14).attr('font-style', 'italic').attr('fill', COR.erro).attr('opacity', 0)
+                .text('"azul" sozinho não compara nada: é uma caixa cheia');
+
+            function sacode(c, t, a, temAlgo, verd) {
+                var k = janela(t, a, a + .8, .1);
+                c.corpo.attr('transform', 'translate(' + Math.sin(t * 34) * 7 * k + ',0) rotate(' + Math.sin(t * 34) * 4 * k + ')');
+                if (temAlgo) {
+                    c.papel.attr('transform', 'translate(' + Math.sin(t * 52) * 9 * k + ',' + (-Math.abs(Math.sin(t * 26)) * 10 * k) + ')');
+                    c.ondas.attr('opacity', k * (.5 + .5 * Math.abs(Math.sin(t * 20))));
+                }
+                c.veredito.text(verd ? 'True' : 'False').attr('fill', verd ? COR.ok : COR.erro);
+                return fase(t, a + .85, a + 1.0);
+            }
+
+            return function (t) {
+                var some = 1 - fase(t, 12.4, 13.2);
+                var parte2 = SUAVE(fase(t, 5.6, 6.0)) * some;
+                codA.g.attr('opacity', 1 - parte2);
+                codB.g.attr('opacity', parte2);
+                /* parte 1 */
+                var v0 = sacode(C[0], t, .8, false, false), v1 = sacode(C[1], t, 2.2, false, false), v2 = sacode(C[2], t, 3.8, true, true);
+                C[0].veredito.attr('opacity', v0 * some); C[1].veredito.attr('opacity', v1 * some); C[2].veredito.attr('opacity', v2 * some);
+                C.forEach(function (c) { c.g.attr('opacity', 1 - .55 * parte2); });
+                codA.realce(t < 2.2 ? 3 : t < 3.8 ? 5 : 7, janela(t, .8, 5.4, .2) * (1 - parte2));
+                if (t < 5.6) {
+                    var limpa = 1 - fase(t, 5.4, 5.6);
+                    term.set(0, 'Sem mensagem', fase(t, 3.3, 3.5) * limpa);
+                    term.set(1, "Texto '0'", fase(t, 4.9, 5.1) * limpa);
+                } else {
+                    var corrige = SUAVE(fase(t, 9.0, 9.6));
+                    term.set(0, 'Cor aceita', fase(t, 8.4, 8.6) * (1 - corrige), COR.erro);
+                    term.set(1, 'Cor recusada', fase(t, 10.3, 10.5) * some, COR.acento);
+                }
+                /* parte 2: o bug do or */
+                comp.attr('opacity', fase(t, 6.0, 6.3) * some);
+                compRes.attr('opacity', fase(t, 6.6, 6.8));
+                ouTxt.attr('opacity', fase(t, 6.4, 6.6) * some);
+                var fix = SUAVE(fase(t, 9.0, 9.6)) * (1 - SUAVE(fase(t, 12.4, 13.2)));
+                azul.g.attr('opacity', fase(t, 6.2, 6.5) * (1 - fix) * some);
+                var vA = sacode(azul, t, 7.2, true, true);
+                azul.veredito.attr('opacity', vA);
+                compAzul.attr('opacity', fix * some);
+                compAzulRes.attr('opacity', fase(t, 9.9, 10.1));
+                nota.attr('opacity', janela(t, 8.2, 9.2, .2));
+                codB.realce(1, janela(t, 6.0, 10.6, .2) * parte2);
+                codB.linhas[1].text(fix > .5 ? 'if cor == "rosa" or cor == "azul":' : 'if cor == "rosa" or "azul":');
+            };
+        });
+    }
+
+    function ligar() {
+        cenaCordao('stage-cordao');
+        cenaMoedas('stage-moedas');
+        cenaCarimbos('stage-carimbos');
+        cenaCofre('stage-cofre');
+        cenaCaixas('stage-caixas');
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ligar);
+    else ligar();
+})();
+</script>
+
+
+<script>
+/* ==============================================================
+   Navegação slide a slide: setas, PageUp/Down e espaço.
+
+   As guardas importam: durante a EDIÇÃO (tecla E) e a PINTURA
+   (tecla P) o teclado pertence a esses modos. Sem isso, arrastar
+   um elemento com a seta trocaria de slide no meio da edição.
+   ============================================================== */
+(function () {
+    'use strict';
+    var secs = Array.prototype.slice.call(document.querySelectorAll('body > section'));
+    function atual() {
+        var meio = window.innerHeight / 2, achado = 0;
+        secs.forEach(function (s, i) {
+            var r = s.getBoundingClientRect();
+            if (r.top <= meio && r.bottom > meio) achado = i;
+        });
+        return achado;
+    }
+    function ir(d) {
+        var de = atual(), i = Math.max(0, Math.min(secs.length - 1, de + d));
+        if (i === de) return;
+        secs[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    document.addEventListener('keydown', function (e) {
+        if (document.body.classList.contains('me-on') || document.body.classList.contains('md-on')) return;
+        var t = e.target;
+        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''))) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (['ArrowDown', 'ArrowRight', 'PageDown', ' ', 'Spacebar'].indexOf(e.key) !== -1) { e.preventDefault(); ir(1); }
+        else if (['ArrowUp', 'ArrowLeft', 'PageUp'].indexOf(e.key) !== -1) { e.preventDefault(); ir(-1); }
+    });
+
+    /* ---------- desenho (tecla P) pertence AO SLIDE ----------
+       O mira-draw pinta num <canvas> único, fixo sobre a janela: sem
+       isto, o traço feito num slide fica pairando sobre todos os outros,
+       como se você tivesse riscado a tela e não o slide.
+
+       Aqui os traços são guardados por slide e trocados junto com ele:
+       sai do slide, o desenho sai; volta, o desenho volta. Usa a API
+       pública `getShapes`/`setShapes` do mira-draw, sem tocar no módulo.
+
+       No palco do mira-remote o desenho é da shell (modelo global
+       sincronizado com o celular), então lá isto não se mete. */
+    var porSlide = {}, ultimo = -1;
+    function trocarDesenho() {
+        if (window.__MIRA_REMOTE_STAGE__) return;
+        var md = window.miraDraw;
+        if (!md || !md.getShapes || !md.setShapes) return;   // deck sem a caneta
+        var i = atual();
+        if (i === ultimo) return;
+        if (ultimo >= 0) porSlide[ultimo] = md.getShapes();  // guarda o que estava
+        ultimo = i;
+        md.setShapes(porSlide[i] || []);
+    }
+    window.addEventListener('load', function () { ultimo = atual(); });
+    window.addEventListener('scroll', trocarDesenho, { passive: true });
+})();
+</script>
+
+<script defer src="mira/mira-edit.js"></script>
+<script defer src="mira/mira-edit-free.js"></script>
+<script defer src="mira/mira-draw.js"></script>
+</body>
+</html>

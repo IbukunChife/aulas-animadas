@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Introdução ao Python · Aulas Animadas</title>
+  <meta name="description" content="Metáforas animadas para as 10 aulas do módulo de Programação em Python (ITEAM Boa Vista, Turma 2).">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #000;
+      --text: #fff;
+      --text-soft: rgba(255,255,255,0.66);
+      --text-softer: rgba(255,255,255,0.40);
+      --card-bg: rgba(255,255,255,0.04);
+      --card-border: rgba(255,255,255,0.10);
+      --python: #5B9BF5;
+      --python-2: #94BEF9;
+      --python-glow: rgba(91,155,245,0.20);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+    .glow { position: fixed; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 60% 45% at 80% 10%, rgba(91,155,245,0.10), transparent),
+                  radial-gradient(ellipse 50% 40% at 10% 90%, rgba(91,155,245,0.06), transparent); }
+    main { position: relative; max-width: 1080px; margin: 0 auto; padding: 56px 16px 48px; }
+    .voltar { color: var(--text-soft); text-decoration: none; font-size: 14px; }
+    .voltar:hover { color: var(--python-2); }
+    header { margin: 28px 0 40px; }
+    .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--python-2); }
+    h1 { font-size: clamp(36px, 7vw, 64px); font-weight: 900; line-height: 1.05; margin: 12px 0 16px; text-wrap: balance; }
+    .lead { max-width: 680px; font-size: 17px; line-height: 1.6; color: var(--text-soft); text-wrap: pretty; margin: 0; }
+    .stats { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 24px; }
+    .stat b { display: block; font-size: 28px; font-weight: 900; color: var(--python); line-height: 1; }
+    .stat small { font-size: 12px; color: var(--text-softer); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
+    .aula { display: flex; flex-direction: column; gap: 10px; padding: 22px; border-radius: 16px;
+      background: var(--card-bg); border: 1px solid var(--card-border); color: inherit; text-decoration: none;
+      transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease; }
+    .aula:hover, .aula:focus-visible { transform: translateY(-4px); border-color: var(--python); box-shadow: 0 16px 48px var(--python-glow); outline: none; }
+    .topo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .num { font-size: 13px; font-weight: 700; letter-spacing: .08em; color: var(--python-2); }
+    .data { font-size: 12px; color: var(--text-softer); }
+    .aula h2 { margin: 0; font-size: 20px; font-weight: 800; line-height: 1.25; }
+    .metaforas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 6px; }
+    .metaforas span { font-size: 12px; padding: 3px 10px; border-radius: 999px; color: var(--text-soft);
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); }
+    .nota { margin-top: 40px; padding: 22px 26px; border-radius: 16px; background: var(--card-bg); border: 1px solid var(--card-border); }
+    .nota h3 { margin: 0 0 8px; font-size: 17px; }
+    .nota p { margin: 0; color: var(--text-soft); line-height: 1.6; }
+    kbd { font-family: ui-monospace, Consolas, monospace; font-size: 13px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--card-border); background: rgba(255,255,255,0.06); }
+    footer { margin-top: 40px; text-align: center; font-size: 14px; color: var(--text-softer); }
+    footer a { color: var(--text-soft); }
+    @media (prefers-reduced-motion: reduce) { .aula { transition: none; } }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+  <main>
+    <a class="voltar" href="../index.html">← Todas as trilhas</a>
+    <header>
+      <div class="eyebrow">Trilha · Ensino · ITEAM Boa Vista</div>
+      <h1>Introdução ao Python</h1>
+      <p class="lead">Metáforas animadas para as 10 aulas do módulo de Programação em Python. Cada deck é um apoio para projetar entre os slides oficiais: primeiro a imagem do cotidiano, depois o código, com a saída real que o Python mostra.</p>
+      <div class="stats">
+        <div class="stat"><b>10</b><small>aulas</small></div>
+        <div class="stat"><b>46</b><small>metáforas animadas</small></div>
+        <div class="stat"><b>5</b><small>unidades</small></div>
+      </div>
+    </header>
+
+    <section class="grid" aria-label="Aulas">
+      <a class="aula" href="aula-01-introducao/index.html">
+        <div class="topo"><span class="num">AULA 01</span><span class="data">30/10</span></div>
+        <h2>Introdução ao Python</h2>
+        <div class="metaforas"><span>montador e manual</span><span>carteiro do PATH</span><span>conversa × receita</span><span>vitrine das aspas</span><span>portaria do input</span><span>crachá da variável</span></div>
+      </a>
+      <a class="aula" href="aula-02-variaveis-tipos/index.html">
+        <div class="topo"><span class="num">AULA 02</span><span class="data">03/11</span></div>
+        <h2>Variáveis, tipos e operadores</h2>
+        <div class="metaforas"><span>raio-x da bagagem</span><span>ovos nas caixas</span><span>triagem do pronto-socorro</span><span>foto × nota</span><span>formulário da f-string</span></div>
+      </a>
+      <a class="aula" href="aula-03-condicionais/index.html">
+        <div class="topo"><span class="num">AULA 03</span><span class="data">04/11</span></div>
+        <h2>Estruturas condicionais</h2>
+        <div class="metaforas"><span>cordão VIP</span><span>separador de moedas</span><span>balcão de carimbos</span><span>cofre de duas chaves</span><span>caixas sacudidas</span></div>
+      </a>
+      <a class="aula" href="aula-04-repeticao-excecoes/index.html">
+        <div class="topo"><span class="num">AULA 04</span><span class="data">05/11</span></div>
+        <h2>Repetição e exceções</h2>
+        <div class="metaforas"><span>pista com cancela</span><span>pedras do igarapé</span><span>três elevadores</span><span>calhas de erro</span><span>tapete × pá</span></div>
+      </a>
+      <a class="aula" href="aula-05-listas-tuplas/index.html">
+        <div class="topo"><span class="num">AULA 05</span><span class="data">06/11</span></div>
+        <h2>Listas e tuplas</h2>
+        <div class="metaforas"><span>pão fatiado</span><span>quadro × placa</span><span>link × fotocópia</span><span>caixa de encomenda</span></div>
+      </a>
+      <a class="aula" href="aula-06-dicionarios-conjuntos/index.html">
+        <div class="topo"><span class="num">AULA 06</span><span class="data">09/11</span></div>
+        <h2>Dicionários, conjuntos e compreensões</h2>
+        <div class="metaforas"><span>guarda-volumes</span><span>álbum de figurinhas</span><span>carimbos das listas</span><span>cozinha da compreensão</span></div>
+      </a>
+      <a class="aula" href="aula-07-funcoes-modulos/index.html">
+        <div class="topo"><span class="num">AULA 07</span><span class="data">10/11</span></div>
+        <h2>Funções e módulos</h2>
+        <div class="metaforas"><span>loja online</span><span>prato padrão</span><span>quarto × sala</span><span>bonecas russas</span><span>caixa de ferramentas</span></div>
+      </a>
+      <a class="aula" href="aula-08-classes-objetos/index.html">
+        <div class="topo"><span class="num">AULA 08</span><span class="data">11/11</span></div>
+        <h2>Classes e objetos</h2>
+        <div class="metaforas"><span>forma de bolo</span><span>cartão no caixa</span><span>placa do prédio</span><span>hotel</span></div>
+      </a>
+      <a class="aula" href="aula-09-heranca-polimorfismo/index.html">
+        <div class="topo"><span class="num">AULA 09</span><span class="data">12/11</span></div>
+        <h2>Herança, encapsulamento e polimorfismo</h2>
+        <div class="metaforas"><span>balcão da farmácia</span><span>blocos de montar</span><span>tomada</span><span>dois livros</span></div>
+      </a>
+      <a class="aula" href="aula-10-design-classes/index.html">
+        <div class="topo"><span class="num">AULA 10</span><span class="data">13/11</span></div>
+        <h2>Design de classes</h2>
+        <div class="metaforas"><span>gaveteiro</span><span>gerador compartilhado</span><span>carta com lacuna</span><span>mapa do módulo</span></div>
+      </a>
+    </section>
+
+    <section class="nota">
+      <h3>Como apresentar</h3>
+      <p>Abra a aula e use as setas para passar os slides. Cada animação começa do zero quando o slide entra na tela e repete em ciclos lentos, para acompanhar a explicação. <kbd>P</kbd> liga a caneta para desenhar por cima e <kbd>E</kbd> abre o modo de edição. Os decks funcionam sem internet.</p>
+    </section>
+
+    <footer>
+      <a href="https://github.com/IbukunChife/aulas-animadas">IbukunChife/aulas-animadas</a> · Ibukun C. Didier · 2026
+    </footer>
+  </main>
+</body>
+</html>

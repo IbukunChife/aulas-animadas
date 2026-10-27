@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Aula 09 · Herança e polimorfismo</title>
+
+<!-- ==========================================================
+     MIRA-DEFAULT · template oficial padrão do Mira
+     ----------------------------------------------------------
+     Um slide = um título em cima e uma animação ocupando todo o
+     resto do quadro 16:9. Sem card, sem pílulas, sem moldura: a
+     animação É o slide.
+
+     Veio do mira-studio-full, mas SÓ a parte de animação. Ficaram
+     de fora, de propósito, as coisas que existem para gravar:
+       - regra dos terços (animação 2/3 + câmera 1/3)
+       - layout de câmera cheia
+       - teleprompter e gravador
+     Slide comum não tem câmera. Quem precisa gravar usa
+     /mira-studio-full (16:9) ou /mira-studio (9:16), que seguem
+     existindo com essas peças.
+
+     ESTRUTURA DE UM SLIDE DE CONTEÚDO (é o contrato; os agentes
+     de animação procuram .anim-stage):
+
+       <section>
+         <div class="slide-main">
+           <h2>Título <span class="accent">destacado</span></h2>
+           <div class="anim-stage"><svg id="..."></svg></div>
+         </div>
+       </section>
+
+     O PALCO OCUPA O QUADRO INTEIRO, de borda a borda: o .anim-stage
+     é absoluto e cobre a <section> toda, por baixo do título. Não é
+     mais "o que sobra depois do título".
+
+     O TÍTULO FICA POR CIMA de tudo que é do template. A faixa de
+     z-index deste arquivo vai até 10; os módulos de autoria
+     (mira-draw, mira-edit) usam 99998 e acima, e continuam acima do
+     título de propósito, senão não daria para desenhar nem editar
+     por cima dele.
+
+     A ANIMAÇÃO EVITA A FAIXA DO TÍTULO. O palco() mede o título e
+     entrega a faixa livre em unidades do viewBox:
+
+       F.topo         y onde a área livre começa (abaixo do título)
+       F.alturaUtil   altura dessa área
+       F.vy(k)        mapeia 0..1 na faixa livre. Use no lugar de F.H * k
+
+     Regra: nada FOCAL acima de F.topo. Ambiente pode atravessar,
+     porque atrás do título ele lê como profundidade, não como
+     conflito. Os 50px de padding continuam sendo a área segura das
+     bordas.
+     ========================================================== -->
+<link href="assets/vendor/inter.css" rel="stylesheet">
+<script src="assets/vendor/d3.v7.min.js"></script>
+<script src="mira/mira-motion-blur.js"></script>
+<style>
+/* @MIRA:THEME:START */
+/* MIRA THEME: mira-dark (padrão)
+   Identidade clássica do canal: fundo preto, laranja vibrante,
+   glassmorphism no estilo clássico do canal. */
+:root {
+    --mira-primary: #5B9BF5;
+    --mira-crop: #35D07F;
+    --mira-bg: #000000;
+    --mira-text: #ffffff;
+    --mira-text-soft: rgba(255, 255, 255, 0.70);
+    --mira-text-softer: rgba(255, 255, 255, 0.50);
+    --mira-card-bg: rgba(255, 255, 255, 0.05);
+    --mira-card-border: rgba(255, 255, 255, 0.10);
+    --mira-glow-soft: rgba(91, 155, 245, 0.15);
+    --mira-glow-strong: rgba(91, 155, 245, 0.25);
+    --mira-icon-bg: rgba(91, 155, 245, 0.15);
+    --mira-icon-border: rgba(91, 155, 245, 0.30);
+    --mira-pill-bg: rgba(255, 255, 255, 0.04);
+    --mira-pill-border: rgba(255, 255, 255, 0.08);
+    --mira-stage-glow: rgba(91, 155, 245, 0.06);
+    --mira-accent-2: #94BEF9;
+}
+
+
+/* ============================================================
+   MIRA — base.css
+   Estrutura compartilhada por todos os temas.
+   Os temas definem apenas as CSS variables (--mira-*).
+   ============================================================ */
+
+body {
+    background: var(--mira-bg);
+    min-height: 100vh;
+    color: var(--mira-text);
+    font-family: 'Inter', sans-serif;
+}
+
+.primary-color { color: var(--mira-primary); }
+.primary-bg { background: var(--mira-primary); }
+
+.glass-card {
+    background: var(--mira-card-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--mira-card-border);
+    box-shadow: 0 10px 30px var(--mira-glow-soft);
+    transition: all 0.3s ease;
+    border-radius: 0.75rem;
+}
+
+.glass-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px var(--mira-glow-strong);
+}
+
+.icon-hero {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    background: var(--mira-icon-bg);
+    border: 1px solid var(--mira-icon-border);
+}
+
+.attribute-pill {
+    background: var(--mira-pill-bg);
+    border: 1px solid var(--mira-pill-border);
+    transition: all 0.25s ease;
+    border-radius: 9999px;
+}
+
+.attribute-pill:hover {
+    background: var(--mira-icon-bg);
+    border-color: var(--mira-icon-border);
+    transform: translateY(-3px);
+}
+
+/* Palco de animação D3 — tamanho padrão do canvas */
+.anim-stage {
+    width: 100%;
+    height: clamp(400px, 60vh, 620px);
+    background: radial-gradient(circle at 50% 50%, var(--mira-stage-glow), transparent 70%);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+.anim-stage svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.replay-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+    background: var(--mira-pill-bg);
+    border: 1px solid var(--mira-pill-border);
+    color: var(--mira-text-soft);
+    border-radius: 9999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.replay-btn:hover {
+    background: var(--mira-icon-bg);
+    color: var(--mira-primary);
+}
+
+.text-soft { color: var(--mira-text-soft); }
+.text-softer { color: var(--mira-text-softer); }
+
+@keyframes mira-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.85; }
+}
+
+@keyframes mira-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+@keyframes mira-gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* @MIRA:THEME:END */
+
+/* ----------------------------------------------------------
+   A estrutura vem DEPOIS do bloco do tema de propósito: o
+   "npx mira-animator new --theme=..." troca só aquele bloco, e
+   o que está aqui embaixo precisa continuar valendo por cima do
+   que o tema trouxer.
+   ---------------------------------------------------------- */
+:root {
+    --accent: var(--mira-primary);
+    --bg: var(--mira-bg);
+    --ink: var(--mira-text);
+    --muted: var(--mira-text-soft);
+    --line: var(--mira-card-border);
+    /* quadro 16:9 que cabe inteiro na janela */
+    --fmt-w: min(100vw, calc(100vh * 16 / 9));
+    --fmt-h: calc(var(--fmt-w) * 9 / 16);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { background: #000000; scroll-behavior: smooth; scroll-snap-type: y proximity; }
+/* sem barra de rolagem: ela roubaria largura do quadro e criaria
+   scroll horizontal em tela cheia. Navegue por seta ou roda. */
+html { scrollbar-width: none; overflow-x: hidden; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+
+body {
+    background: #000000;
+    color: var(--ink);
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+body > section {
+    position: relative;
+    width: var(--fmt-w);
+    height: var(--fmt-h);
+    min-height: var(--fmt-h);
+    /* centraliza o quadro: em tela que não é 16:9 a sobra vira
+       faixa cinza acima e abaixo, nunca o slide seguinte */
+    margin: calc((100vh - var(--fmt-h)) / 2) 0;
+    scroll-margin-top: calc((100vh - var(--fmt-h)) / 2);
+    overflow: hidden;
+    background: var(--bg);
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    isolation: isolate;
+}
+
+/* DIRETIVA DA CAPA: o título do primeiro slide nunca quebra
+   deixando artigo ou preposição sozinho na linha de baixo. */
+body > section:first-of-type h1,
+body > section:first-of-type h2 { text-wrap: balance; }
+
+h1 { font-size: clamp(34px, 7.4vh, 72px); line-height: 1.02; letter-spacing: -.02em; font-weight: 800; }
+h2 { font-size: clamp(28px, 4.6vh, 46px); line-height: 1.1; letter-spacing: -.01em; font-weight: 800; }
+p  { font-size: clamp(15px, 2vh, 20px); line-height: 1.5; color: var(--muted); }
+.accent { color: var(--accent); }
+
+/* ---------- capa e encerramento: texto centrado no quadro ---------- */
+.slide-centro {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 50px;
+    text-align: center;
+}
+.slide-centro .marca {
+    font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--mira-text-softer);
+}
+
+/* ---------- slide de conteúdo: título em cima, animação no resto ---------- */
+.slide-main {
+    width: 100%;
+    height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 50px;              /* área segura */
+}
+/* o título fica POR CIMA do palco, que agora passa por baixo dele.
+   z-index 10 é o teto deste template; mira-draw e mira-edit vivem em
+   99998 e acima, e continuam por cima do título de propósito, senão
+   não daria para desenhar nem editar sobre ele. */
+.slide-main h2 {
+    flex: 0 0 auto;
+    margin-bottom: 14px;
+    text-align: center;
+    position: relative;
+    z-index: 10;
+}
+
+/* o palco: O QUADRO INTEIRO, de borda a borda.
+
+   `inset: 0` resolve contra a <section>, porque o .slide-main é
+   estático e a <section> é `position: relative`. Sair do fluxo é o
+   que faz o palco passar POR BAIXO do título em vez de começar
+   depois dele.
+
+   Os resets de fundo e raio não são enfeite. Quando o
+   "new --theme=..." injeta o base.css, ele traz `.anim-stage` com
+   altura fixa (clamp 400-620px), glow radial e cantos arredondados,
+   que é a linguagem de CARD. Aqui o palco É o slide: sem neutralizar
+   isso, o deck gerado sai com uma caixinha arredondada no meio, que
+   é exatamente o que este template existe para não ser. */
+.anim-stage {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    background: none;
+    border-radius: 0;
+}
+.anim-stage svg { width: 100%; height: 100%; display: block; }
+
+/* @MIRA:RESPONSIVE:START */
+/* ============================================================
+   MIRA — responsive.css  (camada de reflow mobile-first)
+   Objetivo: TODO slide 16:9 do Mira vira legível no celular em
+   retrato SEM arquivo mobile separado. O mesmo deck se reorganiza:
+   fontes encolhem, grids empilham, padding reduz, palcos escalam.
+
+   Estratégia: os decks nascem "desktop-first" (classes Tailwind com
+   tamanhos fixos: text-6xl, p-10, ...). Esta camada sobrescreve essas
+   classes abaixo de 640px. Usa !important de propósito — precisa
+   vencer o Tailwind CDN (injetado em runtime) em decks legados sem
+   reescrever o HTML. Os clamps têm teto ~= valor desktop, então em
+   telas largas nada muda; só encolhem no estreito.
+   ============================================================ */
+
+/* Guarda universal contra overflow horizontal (o "print cortado" no zap). */
+html, body { max-width: 100%; overflow-x: hidden; }
+img, svg, video, canvas, iframe, table, pre { max-width: 100%; }
+
+@media (max-width: 640px) {
+
+  /* --- Tipografia fluida: encolhe títulos gigantes no celular --- */
+  .text-9xl { font-size: clamp(3rem, 12vw, 5rem)      !important; line-height: 1.05 !important; }
+  .text-8xl { font-size: clamp(2.75rem, 11vw, 4.5rem) !important; line-height: 1.06 !important; }
+  .text-7xl { font-size: clamp(2.25rem, 10vw, 3.75rem)!important; line-height: 1.08 !important; }
+  .text-6xl { font-size: clamp(2rem, 9vw, 3rem)       !important; line-height: 1.1  !important; }
+  .text-5xl { font-size: clamp(1.75rem, 8vw, 2.5rem)  !important; line-height: 1.12 !important; }
+  .text-4xl { font-size: clamp(1.5rem, 7vw, 2rem)     !important; line-height: 1.15 !important; }
+  .text-3xl { font-size: clamp(1.35rem, 6vw, 1.75rem) !important; line-height: 1.2  !important; }
+  .text-2xl { font-size: clamp(1.2rem, 5vw, 1.5rem)   !important; line-height: 1.25 !important; }
+  .text-xl  { font-size: clamp(1.05rem, 4.5vw, 1.25rem)!important; line-height: 1.3 !important; }
+
+  /* Títulos: quebram entre palavras; só partem uma palavra se ela sozinha
+     estourar a largura. Sem hyphens:auto — em PT ele hifena no meio
+     ("pode-rosas") e fica feio em título de display. */
+  h1, h2, h3 { overflow-wrap: break-word; }
+
+  /* --- Espaçamento: paddings de desktop sufocam o celular --- */
+  .p-12 { padding: 1.25rem !important; }
+  .p-10 { padding: 1.15rem !important; }
+  .p-8  { padding: 1.05rem !important; }
+  .px-12, .px-10 { padding-left: 1.15rem !important; padding-right: 1.15rem !important; }
+  .px-8 { padding-left: 1rem !important; padding-right: 1rem !important; }
+  .py-16 { padding-top: 2.5rem !important; padding-bottom: 2.5rem !important; }
+  .gap-8 { gap: 1rem !important; }
+  .gap-10, .gap-12 { gap: 1.25rem !important; }
+
+  /* --- Layout: seção de slide sempre alcançável pelo topo ---
+     min-h-screen + justify-center clipa o topo quando o conteúdo é
+     maior que a tela. No celular, ancora no topo e deixa rolar. */
+  .min-h-screen {
+    min-height: 100dvh !important;
+    height: auto !important;
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+  }
+  .min-h-screen.justify-center,
+  .min-h-screen.items-center { justify-content: flex-start !important; }
+
+  /* --- Grids/flex de 2+ colunas empilham (redundante ao md: do
+         Tailwind, mas cobre grids sem breakpoint declarado). --- */
+  .grid-cols-2, .grid-cols-3, .grid-cols-4 { grid-template-columns: 1fr !important; }
+
+  /* --- Palco de animação (D3/SVG/canvas): nunca estoura a largura,
+         mantém proporção e encolhe a altura. --- */
+  .anim-stage {
+    max-width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 16 / 9;
+    min-height: 0 !important;
+  }
+
+  /* --- Tabelas: fonte menor + rolagem horizontal se precisar. --- */
+  table { font-size: 0.82rem !important; }
+  .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+
+  /* --- Controles flutuantes respeitam a safe-area do iPhone. --- */
+  #mira-next, #next-card {
+    bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+    right: max(1rem, env(safe-area-inset-right)) !important;
+    width: 44px !important; height: 44px !important;
+  }
+}
+/* @MIRA:RESPONSIVE:END */
+</style>
+</head>
+<body>
+
+<!-- === SLIDE 1 · CAPA === -->
+<section>
+    <div class="slide-centro">
+        <span class="marca">Programação em Python · Módulo 06 · ITEAM Boa Vista</span>
+        <h1>Aula 09: herança e <span class="accent">polimorfismo</span></h1>
+        <p>Quatro metáforas para classes que protegem, herdam e respondem cada uma do seu jeito.</p>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>property é <span class="accent">o balcão</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-balcao" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>super() monta <span class="accent">a base</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-blocos" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>Mesma tomada, <span class="accent">aparelhos diferentes</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-tomada" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>== olha o conteúdo, <span class="accent">is o exemplar</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-livros" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<!-- === ENCERRAMENTO === -->
+<section>
+    <div class="slide-centro">
+        <span class="marca">Próxima aula · 13/11</span>
+        <h2>Design de classes e <span class="accent">encerramento</span></h2>
+        <p>Herança ou composição? E a entrega do Projeto Integrador.</p>
+    </div>
+</section>
+
+<script>
+/* ==============================================================
+   Aula 09 · Herança e polimorfismo: quatro metáforas animadas.
+
+   Cada cena é uma função do tempo dentro do ciclo (t, em segundos):
+   o regente zera o relógio quando o slide entra, então a turma
+   sempre vê a história desde o começo. Todo texto de código e de
+   saída abaixo é o que o Python 3.12 realmente executa e imprime
+   (conferido no aula_09.py da Turma 2).
+   ============================================================== */
+(function () {
+    'use strict';
+
+    /* A cor sai do TEMA, nunca fixa no código. */
+    function cor(nome, reserva) {
+        var v = getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+        return v || reserva;
+    }
+    var COR = {
+        marca: cor('--mira-primary', '#5B9BF5'),
+        acento: cor('--mira-accent-2', '#94BEF9'),
+        tinta: cor('--mira-text', '#ffffff'),
+        fundo: cor('--mira-bg', '#000000'),
+        ok: cor('--mira-crop', '#35D07F'),
+        erro: '#FF6B6B',                       /* só para erro, nunca decoração */
+        suave: 'rgba(255,255,255,.66)',
+        fraco: 'rgba(255,255,255,.32)',
+        linha: 'rgba(255,255,255,.14)',
+        painel: 'rgba(255,255,255,.045)',
+        papel: '#F4F7FC',
+        escuro: '#0B1220'
+    };
+    var MONO = "Consolas, 'Cascadia Mono', 'JetBrains Mono', 'DejaVu Sans Mono', monospace";
+    var SANS = "'Inter', system-ui, sans-serif";
+
+    /* ---------- regente (do template mira-default) ---------- */
+    function reger(svgId, quadro) {
+        var svg = document.getElementById(svgId);
+        var slide = svg && svg.closest('section');
+        if (!slide || typeof IntersectionObserver !== 'function') {
+            d3.timer(function (ms) { quadro(ms); });
+            return;
+        }
+        var relogio = null, visivel = false;
+        d3.timer(function (ms) {
+            if (!visivel) { quadro(0); return; }
+            if (relogio === null) relogio = ms;
+            quadro(ms - relogio);
+        });
+        new IntersectionObserver(function (entradas) {
+            entradas.forEach(function (e) {
+                if (e.isIntersecting === visivel) return;
+                visivel = e.isIntersecting;
+                relogio = null;
+            });
+        }, { threshold: 0.6 }).observe(slide);
+    }
+
+    /* ---------- palco (do template mira-default) ---------- */
+    function palco(svgId) {
+        var svg = d3.select('#' + svgId);
+        if (svg.empty()) return null;
+        var caixa = svg.node().closest('.anim-stage');
+        var secao = caixa && caixa.closest ? caixa.closest('section') : null;
+        var titulo = secao && secao.querySelector
+            ? secao.querySelector('.slide-main h2, .slide-main h1')
+            : null;
+        var RESPIRO = 18;
+        var F = { W: 960, H: 460, topo: 0, alturaUtil: 460 };
+        F.vy = function (k) { return F.topo + F.alturaUtil * k; };
+
+        function casar() {
+            var r = caixa.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) F.H = Math.round(F.W * r.height / r.width);
+            svg.attr('viewBox', '0 0 ' + F.W + ' ' + F.H);
+            F.topo = 0;
+            if (titulo && titulo.getBoundingClientRect && r.height > 0) {
+                var t = titulo.getBoundingClientRect();
+                var basePx = Math.max(0, (t.bottom || 0) - (r.top || 0));
+                F.topo = Math.round(F.H * basePx / r.height) + RESPIRO;
+                F.topo = Math.min(F.topo, Math.round(F.H * 0.40));
+            }
+            F.alturaUtil = F.H - F.topo;
+        }
+        casar();
+        window.addEventListener('resize', casar);
+        svg.selectAll('*').remove();
+        return { svg: svg, F: F };
+    }
+
+    /* ---------- tempo ---------- */
+    function lim(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+    function fase(t, a, b) { return lim((t - a) / (b - a)); }
+    function mix(a, b, k) { return a + (b - a) * k; }
+    /* aparece em a, some em b, com rampas de r segundos */
+    function janela(t, a, b, r) { r = r || .3; return Math.min(fase(t, a, a + r), 1 - fase(t, b - r, b)); }
+    /* deslocamento de objeto: explode e assenta com cauda longa */
+    var EA = (window.miraMotionBlur && window.miraMotionBlur.explodeAssenta)
+        ? window.miraMotionBlur.explodeAssenta(.45, 9) : d3.easeCubicOut;
+    var SUAVE = d3.easeSinInOut;
+    /* quadros-chave [[t, v], ...] com explode-assenta entre eles */
+    function kf(t, lista) {
+        if (t <= lista[0][0]) return lista[0][1];
+        for (var i = 1; i < lista.length; i++) {
+            if (t <= lista[i][0]) {
+                var a = lista[i - 1], b = lista[i];
+                return mix(a[1], b[1], EA(fase(t, a[0], b[0])));
+            }
+        }
+        return lista[lista.length - 1][1];
+    }
+    /* texto sendo digitado: corta a string pelo progresso */
+    function digitado(texto, k) { return texto.slice(0, Math.round(texto.length * lim(k))); }
+
+    /* ---------- cena: monta uma vez, refaz se o palco mudar de tamanho ---------- */
+    function cena(svgId, cicloMs, construir) {
+        var p = palco(svgId); if (!p) return;
+        var chave = null, quadro = null, raiz = null;
+        reger(svgId, function (ms) {
+            var k = p.F.H + '|' + p.F.topo;
+            if (k !== chave) {
+                chave = k;
+                p.svg.selectAll('*').remove();
+                raiz = p.svg.append('g');
+                quadro = construir(raiz, p.F);
+            }
+            /* entrada coreografada: a cena sobe e acende no primeiro segundo */
+            var e = d3.easeCubicOut(fase(ms, 0, 900));
+            raiz.attr('opacity', e).attr('transform', 'translate(0,' + (1 - e) * 14 + ')');
+            quadro((ms % cicloMs) / 1000, ms / 1000);
+        });
+    }
+
+    /* ---------- peças comuns ---------- */
+    function rotulo(g, x, y, texto, ancora) {
+        return g.append('text').attr('x', x).attr('y', y)
+            .attr('text-anchor', ancora || 'start')
+            .attr('font-family', SANS).attr('font-size', 12).attr('font-weight', 700)
+            .attr('letter-spacing', '.14em').attr('fill', COR.fraco).text(texto.toUpperCase());
+    }
+    function painel(g, x, y, w, h, titulo, escuro) {
+        var p = g.append('g').attr('transform', 'translate(' + x + ',' + y + ')');
+        p.append('rect').attr('width', w).attr('height', h).attr('rx', 12)
+            .attr('fill', escuro ? 'rgba(5,9,18,.92)' : COR.painel)
+            .attr('stroke', COR.linha);
+        if (titulo) rotulo(p, 4, -10, titulo);
+        return p;
+    }
+    /* bloco de código numerado, com faixa de realce que anda de linha em linha */
+    function codigo(g, x, y, w, linhas, tam, titulo) {
+        var lh = Math.round(tam * 1.7), h = linhas.length * lh + 20;
+        var p = painel(g, x, y, w, h, titulo);
+        var realce = p.append('rect').attr('x', 6).attr('width', w - 12).attr('height', lh)
+            .attr('rx', 6).attr('opacity', 0);
+        var txt = linhas.map(function (l, i) {
+            var yy = 10 + i * lh + lh * .68;
+            p.append('text').attr('x', 14).attr('y', yy).attr('font-family', MONO)
+                .attr('font-size', tam * .8).attr('fill', COR.fraco).text(i + 1);
+            return p.append('text').attr('x', 40).attr('y', yy).attr('font-family', MONO)
+                .attr('font-size', tam).attr('fill', COR.tinta).attr('xml:space', 'preserve').text(l);
+        });
+        return {
+            h: h, lh: lh, g: p, linhas: txt,
+            yLinha: function (i) { return y + 10 + i * lh + lh / 2; },
+            realce: function (i, k, c) {
+                if (i < 0 || k <= 0) { realce.attr('opacity', 0); return; }
+                realce.attr('y', 10 + i * lh).attr('fill', c || COR.marca).attr('opacity', .26 * k);
+            }
+        };
+    }
+    /* terminal com n linhas, cada uma ligada e desligada por quadro */
+    function terminal(g, x, y, w, n, tam, titulo) {
+        var lh = Math.round(tam * 1.75), h = n * lh + 20;
+        var p = painel(g, x, y, w, h, titulo || 'terminal', true);
+        var ls = [];
+        for (var i = 0; i < n; i++) {
+            ls.push(p.append('text').attr('x', 14).attr('y', 10 + i * lh + lh * .68)
+                .attr('font-family', MONO).attr('font-size', tam).attr('xml:space', 'preserve')
+                .attr('fill', COR.tinta).attr('opacity', 0));
+        }
+        var cursor = p.append('rect').attr('width', tam * .55).attr('height', tam * 1.1)
+            .attr('fill', COR.tinta).attr('opacity', 0);
+        return {
+            h: h, lh: lh,
+            set: function (i, texto, op, c) {
+                ls[i].text(texto).attr('opacity', op).attr('fill', c || COR.tinta);
+            },
+            /* cursor piscando logo depois do texto da linha i */
+            cursor: function (i, chars, op) {
+                cursor.attr('x', 14 + chars * tam * .55 + 2).attr('y', 10 + i * lh + lh * .68 - tam * .9)
+                    .attr('opacity', op);
+            }
+        };
+    }
+    /* engrenagem flat, desenhada centrada em (0,0) */
+    function pathEngrenagem(r, dentes) {
+        var pts = [], n = dentes * 4;
+        for (var i = 0; i < n; i++) {
+            var a = i / n * Math.PI * 2, rr = (i % 4 < 2) ? r : r * .78;
+            pts.push([Math.cos(a) * rr, Math.sin(a) * rr]);
+        }
+        return 'M' + pts.map(function (q) { return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join('L') + 'Z';
+    }
+    function largMono(texto, tam) { return texto.length * tam * .6; }
+
+    /* largura real de um caractere mono, medida no navegador */
+    function medirMono(g, tam) {
+        var t = g.append('text').attr('font-family', MONO).attr('font-size', tam).attr('opacity', 0).text('0123456789');
+        var w = t.node().getComputedTextLength ? t.node().getComputedTextLength() / 10 : tam * .6;
+        t.remove();
+        return w || tam * .6;
+    }
+
+    /* caixa de entrega: aberta mostra o conteúdo (ou nada) */
+    function caixaEntrega(raiz, conteudo) {
+        var g = raiz.append('g').attr('opacity', 0);
+        g.append('rect').attr('x', -40).attr('y', -28).attr('width', 80).attr('height', 56).attr('rx', 6)
+            .attr('fill', '#C9A86A').attr('stroke', '#8E7240').attr('stroke-width', 2);
+        g.append('rect').attr('x', -40).attr('y', -6).attr('width', 80).attr('height', 8).attr('fill', 'rgba(0,0,0,.18)');
+        var txt = g.append('text').attr('y', 8).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 22)
+            .attr('font-weight', 800).attr('fill', COR.escuro).text(conteudo);
+        return { g: g, txt: txt };
+    }
+
+    /* ================================================================
+       2. PROPERTY É O BALCÃO · a farmácia
+       Causa: com @property, ler e escrever conta.saldo passa pelo
+       getter e pelo setter; o setter valida e pode recusar.
+       Loop: lê 100, guarda 250 (conferido), lê 250, o -50 é devolvido
+       com ValueError.
+       ================================================================ */
+    function cenaBalcao(svgId) {
+        cena(svgId, 13000, function (raiz, F) {
+            var cod = codigo(raiz, 36, F.vy(.04), 420, ['conta = Conta(100)', 'print(conta.saldo)    # parece atributo...',
+                'conta.saldo = 250     # ...mas passa pelo setter', 'print(conta.saldo)', 'conta.saldo = -50     # o setter barra'], 14, 'usando a property');
+            var term = terminal(raiz, 36, F.vy(.04) + cod.h + 40, 420, 3, 16);
+            var regra = codigo(raiz, 36, F.vy(.04) + cod.h + 40 + term.h + 40, 420, ['@saldo.setter', 'def saldo(self, valor):',
+                '    if valor < 0: raise ValueError(...)', '    self._saldo = valor'], 13, 'a regra do balcão');
+            /* fundos: a prateleira com o _saldo */
+            var px = 560, py = F.vy(.08);
+            raiz.append('rect').attr('x', px).attr('y', py).attr('width', 330).attr('height', 120).attr('rx', 10).attr('fill', '#101a2c').attr('stroke', COR.linha);
+            rotulo(raiz, px + 6, py - 10, 'fundos: self._saldo');
+            var frasco = raiz.append('g').attr('transform', 'translate(' + (px + 165) + ',' + (py + 64) + ')');
+            frasco.append('rect').attr('x', -40).attr('y', -34).attr('width', 80).attr('height', 68).attr('rx', 10).attr('fill', '#EEF2F8');
+            frasco.append('rect').attr('x', -30).attr('y', -44).attr('width', 60).attr('height', 12).attr('rx', 3).attr('fill', COR.marca);
+            var valor = frasco.append('text').attr('y', 10).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 24)
+                .attr('font-weight', 800).attr('fill', '#1C3D73');
+            /* o balcão */
+            var by = F.vy(.52);
+            raiz.append('rect').attr('x', 520).attr('y', by).attr('width', 410).attr('height', 24).attr('rx', 6).attr('fill', COR.marca);
+            raiz.append('text').attr('x', 725).attr('y', by + 17).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 14).attr('font-weight', 800).attr('fill', COR.escuro).text('balcão: conta.saldo');
+            var luz = raiz.append('circle').attr('cx', 725).attr('cy', by - 40).attr('r', 18).attr('fill', '#3A4558');
+            var luzTxt = raiz.append('text').attr('x', 725).attr('y', by - 34).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 16).attr('font-weight', 800).attr('fill', COR.escuro);
+            var pacote = raiz.append('g').attr('opacity', 0);
+            pacote.append('rect').attr('x', -40).attr('y', -26).attr('width', 80).attr('height', 52).attr('rx', 6).attr('fill', '#C9A86A').attr('stroke', '#8E7240').attr('stroke-width', 2);
+            var pacoteTxt = pacote.append('text').attr('y', 8).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 20)
+                .attr('font-weight', 800).attr('fill', COR.escuro);
+            var nota = raiz.append('text').attr('x', 725).attr('y', F.vy(.96)).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 13).attr('font-style', 'italic').attr('fill', COR.acento).text('parece prateleira aberta, mas tudo passa pelo balcão');
+            var leitura = raiz.append('text').attr('x', 725).attr('y', by + 70).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 20).attr('font-weight', 800).attr('fill', COR.acento).attr('opacity', 0);
+            var xCli = 725, yCli = F.vy(.82), yBal = by - 34;
+
+            return function (t) {
+                var some = 1 - fase(t, 11.6, 12.4);
+                var v = t < 4.2 ? 100 : 250;
+                valor.text(v);
+                var r = t < 2.6 ? 1 : t < 5.0 ? 2 : t < 6.6 ? 3 : 4;
+                cod.realce(r, janela(t, .6, 9.6, .2));
+                regra.realce(t >= 2.8 && t < 4.6 ? 3 : t >= 6.8 && t < 9.0 ? 2 : -1, 1);
+                /* leituras: o valor vem dos fundos até o balcão */
+                [[.8, 100], [5.0, 250]].forEach(function (l) {
+                    if (t >= l[0] && t < l[0] + 1.6) leitura.text(l[1]).attr('opacity', janela(t, l[0] + .4, l[0] + 1.6, .2));
+                });
+                if (!(t >= .8 && t < 2.4) && !(t >= 5.0 && t < 6.6)) leitura.attr('opacity', 0);
+                term.set(0, '100', fase(t, 1.6, 1.8) * some);
+                term.set(1, '250', fase(t, 5.8, 6.0) * some);
+                /* escritas: o pacote chega ao balcão e é conferido */
+                var w = t < 6.6 ? [2.8, '250', true] : [6.8, '-50', false];
+                var a = w[0], chega = EA(fase(t, a, a + .8));
+                var x = xCli, y = mix(yCli, yBal, chega);
+                if (w[2]) { var guarda = EA(fase(t, a + 1.2, a + 1.8)); y = mix(y, py + 64, guarda); }
+                else { var devolve = EA(fase(t, a + 1.2, a + 1.8)); y = mix(y, yCli, devolve); x = mix(x, xCli + 60, devolve); }
+                pacoteTxt.text(w[1]);
+                pacote.attr('transform', 'translate(' + x + ',' + y + ')').attr('opacity', fase(t, a, a + .1) * (1 - fase(t, a + 1.7, a + 2.0) * (w[2] ? 1 : 0)) * (w[2] ? 1 : 1 - fase(t, 10.6, 11.0)));
+                var confere = janela(t, a + .8, a + 1.6, .1);
+                luz.attr('fill', confere > 0 ? (w[2] ? COR.ok : COR.erro) : '#3A4558');
+                luzTxt.text(confere > 0 ? (w[2] ? '✓' : '×') : '');
+                term.set(2, 'ValueError: Saldo negativo', fase(t, 8.2, 8.4) * some, COR.erro);
+                nota.attr('opacity', fase(t, 9.0, 9.4) * some);
+            };
+        });
+    }
+
+    /* ================================================================
+       3. SUPER() MONTA A BASE · blocos de montar
+       Causa: a filha que tem __init__ próprio precisa chamar
+       super().__init__ para montar a parte do pai; sem isso, os
+       atributos do pai não existem.
+       Loop: sem super, o bloco portas flutua e descrever() acha o
+       encaixe vazio; com super, o chassi vem primeiro.
+       ================================================================ */
+    function cenaBlocos(svgId) {
+        cena(svgId, 13000, function (raiz, F) {
+            var codA = codigo(raiz, 36, F.vy(.04), 420, ['class Carro(Veiculo):', '    def __init__(self, marca, ano, portas):',
+                '        self.portas = portas    # e o pai?', '', 'carro = Carro("Fiat", 2023, 4)', 'print(carro.descrever())'], 14, 'sem super()');
+            var codB = codigo(raiz, 36, F.vy(.04), 420, ['class Carro(Veiculo):', '    def __init__(self, marca, ano, portas):',
+                '        super().__init__(marca, ano)', '        self.portas = portas', '', 'carro = Carro("Fiat", 2023, 4)', 'print(carro.descrever())'], 14, 'com super()');
+            var term = terminal(raiz, 36, F.vy(.04) + codB.h + 40, 420, 2, 14);
+            raiz.append('text').attr('x', 36).attr('y', F.vy(.04) + codB.h + 40 + term.h + 40).attr('font-family', MONO).attr('font-size', 13)
+                .attr('fill', COR.suave).text('Veiculo.descrever() usa self.marca e self.ano');
+            var bx = 720, base = F.vy(.82);
+            raiz.append('rect').attr('x', bx - 170).attr('y', base).attr('width', 340).attr('height', 14).attr('rx', 4).attr('fill', COR.linha);
+            /* encaixe do chassi (pontilhado) */
+            var encaixe = raiz.append('rect').attr('x', bx - 150).attr('y', base - 80).attr('width', 300).attr('height', 76).attr('rx', 10)
+                .attr('fill', 'none').attr('stroke', COR.fraco).attr('stroke-dasharray', '6 6').attr('stroke-width', 2);
+            function bloco(w, h, cor, linhas) {
+                var g = raiz.append('g').attr('opacity', 0);
+                g.append('rect').attr('x', -w / 2).attr('y', -h).attr('width', w).attr('height', h).attr('rx', 10).attr('fill', cor);
+                for (var k = -w / 2 + 30; k < w / 2; k += 60) g.append('rect').attr('x', k - 14).attr('y', -h - 10).attr('width', 28).attr('height', 12).attr('rx', 4).attr('fill', cor);
+                linhas.forEach(function (l, i) {
+                    g.append('text').attr('y', -h + 30 + i * 22).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 15)
+                        .attr('font-weight', 800).attr('fill', COR.escuro).text(l);
+                });
+                return g;
+            }
+            var chassi = bloco(300, 76, COR.marca, ['Veiculo: chassi', 'marca="Fiat"  ano=2023']);
+            var portas = bloco(180, 60, COR.acento, ['Carro: portas=4']);
+            var lupa = raiz.append('g').attr('opacity', 0);
+            lupa.append('circle').attr('r', 22).attr('fill', 'none').attr('stroke', COR.tinta).attr('stroke-width', 5);
+            lupa.append('line').attr('x1', 16).attr('y1', 16).attr('x2', 34).attr('y2', 34).attr('stroke', COR.tinta).attr('stroke-width', 6).attr('stroke-linecap', 'round');
+            var busca = raiz.append('text').attr('x', bx).attr('y', base + 44).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 15).attr('font-weight', 700).attr('fill', COR.acento).attr('opacity', 0).text('descrever() procura self.marca');
+
+            return function (t) {
+                var some = 1 - fase(t, 12.0, 12.8);
+                var parte2 = SUAVE(fase(t, 5.2, 5.8)) * some;
+                codA.g.attr('opacity', 1 - parte2); codB.g.attr('opacity', parte2);
+                if (t < 5.4) {
+                    /* sem super: só o bloco de cima, flutuando sobre o encaixe vazio */
+                    var k = EA(fase(t, 1.0, 1.8));
+                    portas.attr('transform', 'translate(' + bx + ',' + mix(F.vy(.20), base - 110, k) + ')').attr('opacity', fase(t, .9, 1.0) * (1 - fase(t, 5.0, 5.4)));
+                    chassi.attr('opacity', 0);
+                    encaixe.attr('stroke', janela(t, 2.6, 4.6, .2) > 0 ? COR.erro : COR.fraco);
+                    codA.realce(t < 2.2 ? 2 : 5, janela(t, .8, 4.8, .2));
+                    lupa.attr('transform', 'translate(' + mix(bx + 150, bx - 60, EA(fase(t, 2.2, 3.2))) + ',' + (base - 40) + ')').attr('opacity', janela(t, 2.1, 4.6, .2));
+                    busca.attr('opacity', janela(t, 2.2, 4.6, .2));
+                    term.set(0, "AttributeError: 'Carro' object", fase(t, 3.6, 3.8) * (1 - fase(t, 5.0, 5.4)), COR.erro);
+                    term.set(1, "has no attribute 'marca'", fase(t, 3.6, 3.8) * (1 - fase(t, 5.0, 5.4)), COR.erro);
+                } else {
+                    var kc = EA(fase(t, 6.4, 7.2)), kp = EA(fase(t, 7.6, 8.3));
+                    chassi.attr('transform', 'translate(' + bx + ',' + mix(F.vy(.20), base - 4, kc) + ')').attr('opacity', fase(t, 6.3, 6.4) * some);
+                    portas.attr('transform', 'translate(' + bx + ',' + mix(F.vy(.20), base - 90, kp) + ')').attr('opacity', fase(t, 7.5, 7.6) * some);
+                    encaixe.attr('stroke', COR.fraco);
+                    codB.realce(t < 7.4 ? 2 : t < 8.5 ? 3 : 6, janela(t, 6.2, 10.0, .2));
+                    lupa.attr('transform', 'translate(' + mix(bx + 150, bx - 60, EA(fase(t, 8.6, 9.4))) + ',' + (base - 40) + ')').attr('opacity', janela(t, 8.5, 10.0, .2));
+                    busca.attr('opacity', janela(t, 8.6, 10.0, .2));
+                    term.set(0, 'Fiat (2023)', fase(t, 9.6, 9.8) * some, COR.acento);
+                    term.set(1, '', 0);
+                }
+            };
+        });
+    }
+
+    /* ================================================================
+       4. MESMA TOMADA, APARELHOS DIFERENTES · polimorfismo e duck typing
+       Causa: a mesma chamada (v.descrever()) roda o método de cada
+       objeto; e o Python nem exige parentesco: basta ter o método.
+       Loop: Carro, Moto e Veiculo ligam na tomada e cada um responde
+       do seu jeito; depois Pato e Robo, sem herança nenhuma.
+       ================================================================ */
+    function cenaTomada(svgId) {
+        cena(svgId, 14000, function (raiz, F) {
+            var codA = codigo(raiz, 36, F.vy(.04), 420, ['frota = [', '    Carro("Fiat", 2023, 4),', '    Moto("Honda", 2024, 160),',
+                '    Veiculo("Volvo", 2020),', ']', 'for v in frota:', '    print(v.descrever())   # mesma chamada'], 14, 'polimorfismo');
+            var codB = codigo(raiz, 36, F.vy(.04), 420, ['class Pato:', '    def falar(self): return "Quack!"', 'class Robo:   # não herda de Pato',
+                '    def falar(self): return "Bip bop."', '', 'for coisa in [Pato(), Robo()]:', '    print(coisa.falar())'], 14, 'duck typing');
+            var term = terminal(raiz, 36, F.vy(.04) + codA.h + 40, 420, 3, 15);
+            var tx = 720, ty = F.vy(.30);
+            raiz.append('rect').attr('x', tx - 70).attr('y', ty - 60).attr('width', 140).attr('height', 120).attr('rx', 18).attr('fill', '#EEF2F8').attr('stroke', '#8B97AB').attr('stroke-width', 3);
+            [-22, 22].forEach(function (d) { raiz.append('rect').attr('x', tx + d - 6).attr('y', ty - 22).attr('width', 12).attr('height', 34).attr('rx', 5).attr('fill', '#2B3446'); });
+            var chamada = raiz.append('text').attr('x', tx).attr('y', ty - 74).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 16).attr('font-weight', 700).attr('fill', COR.acento);
+            var tela = raiz.append('text').attr('x', tx).attr('y', ty + 104).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 18).attr('font-weight', 800).attr('fill', COR.ok);
+            var origem = raiz.append('text').attr('x', tx).attr('y', ty + 130).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 13).attr('font-style', 'italic').attr('fill', COR.suave);
+            function plugue(nome) {
+                var g = raiz.append('g').attr('opacity', 0);
+                g.append('rect').attr('x', -60).attr('y', 0).attr('width', 120).attr('height', 54).attr('rx', 10).attr('fill', COR.marca);
+                g.append('text').attr('y', 34).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 17)
+                    .attr('font-weight', 800).attr('fill', COR.escuro).text(nome);
+                [-22, 22].forEach(function (d) { g.append('rect').attr('x', d - 4).attr('y', -26).attr('width', 8).attr('height', 26).attr('rx', 2).attr('fill', '#C3CCDA'); });
+                return g;
+            }
+            var ITENS = [['Carro', 'Fiat (2023)', 'herdou o descrever() do Veiculo', 'v.descrever()'],
+                ['Moto', 'Moto Honda (2024) - 160cc', 'sobrescreveu o descrever()', 'v.descrever()'],
+                ['Veiculo', 'Volvo (2020)', 'o descrever() original', 'v.descrever()'],
+                ['Pato', 'Quack!', 'tem falar()', 'coisa.falar()'], ['Robo', 'Bip bop.', 'não herda de Pato, mas tem falar()', 'coisa.falar()']];
+            var plugues = ITENS.map(function (it) { return plugue(it[0]); });
+            var fila = F.vy(.88);
+            function tempo(i) { return i < 3 ? .8 + i * 2.0 : 8.0 + (i - 3) * 2.0; }
+
+            return function (t) {
+                var some = 1 - fase(t, 12.6, 13.4);
+                var parte2 = SUAVE(fase(t, 7.2, 7.8)) * some;
+                codA.g.attr('opacity', 1 - parte2); codB.g.attr('opacity', parte2);
+                var ativo = -1;
+                plugues.forEach(function (p, i) {
+                    var a = tempo(i), entra = EA(fase(t, a, a + .6)), sai = EA(fase(t, a + 1.5, a + 1.9));
+                    var y = mix(fila, ty + 12, entra) + (fila - ty) * sai * .0;
+                    var x = mix(tx, tx + (i % 2 === 0 ? -160 : 160), sai);
+                    y = sai > 0 ? mix(ty + 12, fila, sai) : y;
+                    p.attr('transform', 'translate(' + x + ',' + y + ')').attr('opacity', fase(t, a - .2, a) * (1 - fase(t, a + 1.7, a + 1.9)) * some);
+                    if (t >= a + .5 && t < a + 1.6) ativo = i;
+                });
+                var it = ativo >= 0 ? ITENS[ativo] : null;
+                chamada.text(t < 7.6 ? 'v.descrever()' : 'coisa.falar()');
+                tela.text(it ? it[1] : '').attr('opacity', it ? 1 : 0);
+                origem.text(it ? it[2] : '').attr('opacity', it ? 1 : 0);
+                codA.realce(6, janela(t, .8, 6.8, .2));
+                codB.realce(6, janela(t, 8.0, 12.0, .2));
+                if (t < 7.6) {
+                    var l = 1 - fase(t, 7.2, 7.6);
+                    [0, 1, 2].forEach(function (i) { term.set(i, ITENS[i][1], fase(t, tempo(i) + .6, tempo(i) + .8) * l, COR.acento); });
+                } else {
+                    term.set(0, 'Quack!', fase(t, tempo(3) + .6, tempo(3) + .8) * some, COR.acento);
+                    term.set(1, 'Bip bop.', fase(t, tempo(4) + .6, tempo(4) + .8) * some, COR.acento);
+                    term.set(2, '', 0);
+                }
+            };
+        });
+    }
+
+    /* ================================================================
+       5. == COMPARA PÁGINAS, IS COMPARA EXEMPLAR · dois livros iguais
+       Causa: == usa o __eq__ e compara o conteúdo; is pergunta se é o
+       mesmo objeto na memória; len() usa o __len__.
+       Loop: conta as páginas (2), compara o conteúdo (True), compara o
+       tombo (False).
+       ================================================================ */
+    function cenaLivros(svgId) {
+        cena(svgId, 12000, function (raiz, F) {
+            var cod = codigo(raiz, 36, F.vy(.02), 420, ['class Carrinho:', '    def __init__(self, itens):', '        self.itens = itens',
+                '    def __len__(self):', '        return len(self.itens)', '    def __eq__(self, outro):', '        return self.itens == outro.itens',
+                '', 'a = Carrinho(["pão", "leite"])', 'b = Carrinho(["pão", "leite"])', 'print(len(a), a == b, a is b)'], 13, 'o programa');
+            var term = terminal(raiz, 36, F.vy(.02) + cod.h + 30, 420, 1, 18);
+            function livro(x, nome, tombo) {
+                var g = raiz.append('g').attr('transform', 'translate(' + x + ',' + F.vy(.34) + ')').attr('opacity', 0);
+                g.append('rect').attr('x', -80).attr('y', -90).attr('width', 160).attr('height', 180).attr('rx', 8).attr('fill', '#2A3A5C').attr('stroke', COR.marca).attr('stroke-width', 3);
+                g.append('rect').attr('x', -80).attr('y', -90).attr('width', 16).attr('height', 180).attr('fill', COR.marca);
+                var paginas = ['"pão"', '"leite"'].map(function (p, i) {
+                    var r = g.append('rect').attr('x', -50).attr('y', -64 + i * 46).attr('width', 116).attr('height', 36).attr('rx', 4).attr('fill', COR.papel);
+                    g.append('text').attr('x', 8).attr('y', -40 + i * 46).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 15)
+                        .attr('font-weight', 700).attr('fill', COR.escuro).text(p);
+                    return r;
+                });
+                var et = g.append('rect').attr('x', -40).attr('y', 52).attr('width', 96).attr('height', 26).attr('rx', 5).attr('fill', COR.acento);
+                g.append('text').attr('x', 8).attr('y', 70).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 13)
+                    .attr('font-weight', 800).attr('fill', COR.escuro).text(tombo);
+                g.append('text').attr('y', 120).attr('text-anchor', 'middle').attr('font-family', MONO).attr('font-size', 20)
+                    .attr('font-weight', 800).attr('fill', COR.tinta).text(nome);
+                return { g: g, paginas: paginas, et: et };
+            }
+            var A = livro(600, 'a', 'tombo #101'), B = livro(840, 'b', 'tombo #102');
+            var pergunta = raiz.append('text').attr('x', 720).attr('y', F.vy(.72)).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 20).attr('font-weight', 800);
+            var resposta = raiz.append('text').attr('x', 720).attr('y', F.vy(.72) + 32).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 14).attr('font-style', 'italic').attr('fill', COR.suave);
+            var PERG = [[1.6, 'len(a) → 2', 'conta as páginas (__len__)', COR.acento],
+                [3.4, 'a == b → True', 'mesmo conteúdo (__eq__)', COR.ok],
+                [5.2, 'a is b → False', 'mesmo exemplar? não: tombos diferentes', COR.erro]];
+
+            return function (t) {
+                var some = 1 - fase(t, 10.4, 11.2);
+                A.g.attr('opacity', fase(t, .6, .9) * some); B.g.attr('opacity', fase(t, .8, 1.1) * some);
+                var atual = null;
+                PERG.forEach(function (p) { if (t >= p[0] && t < p[0] + 1.8) atual = p; });
+                if (!atual && t >= 7.0 && t < 10.4) atual = [7.0, 'len(a), a == b, a is b → 2 True False', 'conteúdo igual, objetos diferentes', COR.acento];
+                pergunta.text(atual ? atual[1] : '').attr('fill', atual ? atual[3] : COR.tinta).attr('opacity', atual ? janela(t, atual[0], atual[0] + (atual[0] === 7.0 ? 3.4 : 1.8), .2) : 0);
+                resposta.text(atual ? atual[2] : '').attr('opacity', atual ? janela(t, atual[0], atual[0] + (atual[0] === 7.0 ? 3.4 : 1.8), .2) : 0);
+                var pg = janela(t, 1.6, 5.2, .2), et = janela(t, 5.2, 7.0, .2);
+                [A, B].forEach(function (L, i) {
+                    L.paginas.forEach(function (p) { p.attr('stroke', pg > 0 && (i === 0 || t >= 3.4) ? COR.acento : 'none').attr('stroke-width', 3); });
+                    L.et.attr('stroke', et > 0 ? COR.erro : 'none').attr('stroke-width', 3);
+                });
+                cod.realce(t < 1.6 ? 8 : t < 3.4 ? 4 : t < 5.2 ? 6 : 10, janela(t, .6, 8.0, .2));
+                term.set(0, '2 True False', fase(t, 7.2, 7.4) * some, COR.acento);
+            };
+        });
+    }
+
+    function ligar() {
+        cenaBalcao('stage-balcao');
+        cenaBlocos('stage-blocos');
+        cenaTomada('stage-tomada');
+        cenaLivros('stage-livros');
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ligar);
+    else ligar();
+})();
+</script>
+
+
+<script>
+/* ==============================================================
+   Navegação slide a slide: setas, PageUp/Down e espaço.
+
+   As guardas importam: durante a EDIÇÃO (tecla E) e a PINTURA
+   (tecla P) o teclado pertence a esses modos. Sem isso, arrastar
+   um elemento com a seta trocaria de slide no meio da edição.
+   ============================================================== */
+(function () {
+    'use strict';
+    var secs = Array.prototype.slice.call(document.querySelectorAll('body > section'));
+    function atual() {
+        var meio = window.innerHeight / 2, achado = 0;
+        secs.forEach(function (s, i) {
+            var r = s.getBoundingClientRect();
+            if (r.top <= meio && r.bottom > meio) achado = i;
+        });
+        return achado;
+    }
+    function ir(d) {
+        var de = atual(), i = Math.max(0, Math.min(secs.length - 1, de + d));
+        if (i === de) return;
+        secs[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    document.addEventListener('keydown', function (e) {
+        if (document.body.classList.contains('me-on') || document.body.classList.contains('md-on')) return;
+        var t = e.target;
+        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''))) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (['ArrowDown', 'ArrowRight', 'PageDown', ' ', 'Spacebar'].indexOf(e.key) !== -1) { e.preventDefault(); ir(1); }
+        else if (['ArrowUp', 'ArrowLeft', 'PageUp'].indexOf(e.key) !== -1) { e.preventDefault(); ir(-1); }
+    });
+
+    /* ---------- desenho (tecla P) pertence AO SLIDE ----------
+       O mira-draw pinta num <canvas> único, fixo sobre a janela: sem
+       isto, o traço feito num slide fica pairando sobre todos os outros,
+       como se você tivesse riscado a tela e não o slide.
+
+       Aqui os traços são guardados por slide e trocados junto com ele:
+       sai do slide, o desenho sai; volta, o desenho volta. Usa a API
+       pública `getShapes`/`setShapes` do mira-draw, sem tocar no módulo.
+
+       No palco do mira-remote o desenho é da shell (modelo global
+       sincronizado com o celular), então lá isto não se mete. */
+    var porSlide = {}, ultimo = -1;
+    function trocarDesenho() {
+        if (window.__MIRA_REMOTE_STAGE__) return;
+        var md = window.miraDraw;
+        if (!md || !md.getShapes || !md.setShapes) return;   // deck sem a caneta
+        var i = atual();
+        if (i === ultimo) return;
+        if (ultimo >= 0) porSlide[ultimo] = md.getShapes();  // guarda o que estava
+        ultimo = i;
+        md.setShapes(porSlide[i] || []);
+    }
+    window.addEventListener('load', function () { ultimo = atual(); });
+    window.addEventListener('scroll', trocarDesenho, { passive: true });
+})();
+</script>
+
+<script defer src="mira/mira-edit.js"></script>
+<script defer src="mira/mira-edit-free.js"></script>
+<script defer src="mira/mira-draw.js"></script>
+</body>
+</html>

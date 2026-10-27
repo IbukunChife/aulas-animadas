@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Aula 02 · Tipos e operadores</title>
+
+<!-- ==========================================================
+     MIRA-DEFAULT · template oficial padrão do Mira
+     ----------------------------------------------------------
+     Um slide = um título em cima e uma animação ocupando todo o
+     resto do quadro 16:9. Sem card, sem pílulas, sem moldura: a
+     animação É o slide.
+
+     Veio do mira-studio-full, mas SÓ a parte de animação. Ficaram
+     de fora, de propósito, as coisas que existem para gravar:
+       - regra dos terços (animação 2/3 + câmera 1/3)
+       - layout de câmera cheia
+       - teleprompter e gravador
+     Slide comum não tem câmera. Quem precisa gravar usa
+     /mira-studio-full (16:9) ou /mira-studio (9:16), que seguem
+     existindo com essas peças.
+
+     ESTRUTURA DE UM SLIDE DE CONTEÚDO (é o contrato; os agentes
+     de animação procuram .anim-stage):
+
+       <section>
+         <div class="slide-main">
+           <h2>Título <span class="accent">destacado</span></h2>
+           <div class="anim-stage"><svg id="..."></svg></div>
+         </div>
+       </section>
+
+     O PALCO OCUPA O QUADRO INTEIRO, de borda a borda: o .anim-stage
+     é absoluto e cobre a <section> toda, por baixo do título. Não é
+     mais "o que sobra depois do título".
+
+     O TÍTULO FICA POR CIMA de tudo que é do template. A faixa de
+     z-index deste arquivo vai até 10; os módulos de autoria
+     (mira-draw, mira-edit) usam 99998 e acima, e continuam acima do
+     título de propósito, senão não daria para desenhar nem editar
+     por cima dele.
+
+     A ANIMAÇÃO EVITA A FAIXA DO TÍTULO. O palco() mede o título e
+     entrega a faixa livre em unidades do viewBox:
+
+       F.topo         y onde a área livre começa (abaixo do título)
+       F.alturaUtil   altura dessa área
+       F.vy(k)        mapeia 0..1 na faixa livre. Use no lugar de F.H * k
+
+     Regra: nada FOCAL acima de F.topo. Ambiente pode atravessar,
+     porque atrás do título ele lê como profundidade, não como
+     conflito. Os 50px de padding continuam sendo a área segura das
+     bordas.
+     ========================================================== -->
+<link href="assets/vendor/inter.css" rel="stylesheet">
+<script src="assets/vendor/d3.v7.min.js"></script>
+<script src="mira/mira-motion-blur.js"></script>
+<style>
+/* @MIRA:THEME:START */
+/* MIRA THEME: mira-dark (padrão)
+   Identidade clássica do canal: fundo preto, laranja vibrante,
+   glassmorphism no estilo clássico do canal. */
+:root {
+    --mira-primary: #5B9BF5;
+    --mira-crop: #35D07F;
+    --mira-bg: #000000;
+    --mira-text: #ffffff;
+    --mira-text-soft: rgba(255, 255, 255, 0.70);
+    --mira-text-softer: rgba(255, 255, 255, 0.50);
+    --mira-card-bg: rgba(255, 255, 255, 0.05);
+    --mira-card-border: rgba(255, 255, 255, 0.10);
+    --mira-glow-soft: rgba(91, 155, 245, 0.15);
+    --mira-glow-strong: rgba(91, 155, 245, 0.25);
+    --mira-icon-bg: rgba(91, 155, 245, 0.15);
+    --mira-icon-border: rgba(91, 155, 245, 0.30);
+    --mira-pill-bg: rgba(255, 255, 255, 0.04);
+    --mira-pill-border: rgba(255, 255, 255, 0.08);
+    --mira-stage-glow: rgba(91, 155, 245, 0.06);
+    --mira-accent-2: #94BEF9;
+}
+
+
+/* ============================================================
+   MIRA — base.css
+   Estrutura compartilhada por todos os temas.
+   Os temas definem apenas as CSS variables (--mira-*).
+   ============================================================ */
+
+body {
+    background: var(--mira-bg);
+    min-height: 100vh;
+    color: var(--mira-text);
+    font-family: 'Inter', sans-serif;
+}
+
+.primary-color { color: var(--mira-primary); }
+.primary-bg { background: var(--mira-primary); }
+
+.glass-card {
+    background: var(--mira-card-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--mira-card-border);
+    box-shadow: 0 10px 30px var(--mira-glow-soft);
+    transition: all 0.3s ease;
+    border-radius: 0.75rem;
+}
+
+.glass-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px var(--mira-glow-strong);
+}
+
+.icon-hero {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    background: var(--mira-icon-bg);
+    border: 1px solid var(--mira-icon-border);
+}
+
+.attribute-pill {
+    background: var(--mira-pill-bg);
+    border: 1px solid var(--mira-pill-border);
+    transition: all 0.25s ease;
+    border-radius: 9999px;
+}
+
+.attribute-pill:hover {
+    background: var(--mira-icon-bg);
+    border-color: var(--mira-icon-border);
+    transform: translateY(-3px);
+}
+
+/* Palco de animação D3 — tamanho padrão do canvas */
+.anim-stage {
+    width: 100%;
+    height: clamp(400px, 60vh, 620px);
+    background: radial-gradient(circle at 50% 50%, var(--mira-stage-glow), transparent 70%);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+.anim-stage svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.replay-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+    background: var(--mira-pill-bg);
+    border: 1px solid var(--mira-pill-border);
+    color: var(--mira-text-soft);
+    border-radius: 9999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.replay-btn:hover {
+    background: var(--mira-icon-bg);
+    color: var(--mira-primary);
+}
+
+.text-soft { color: var(--mira-text-soft); }
+.text-softer { color: var(--mira-text-softer); }
+
+@keyframes mira-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.85; }
+}
+
+@keyframes mira-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+@keyframes mira-gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* @MIRA:THEME:END */
+
+/* ----------------------------------------------------------
+   A estrutura vem DEPOIS do bloco do tema de propósito: o
+   "npx mira-animator new --theme=..." troca só aquele bloco, e
+   o que está aqui embaixo precisa continuar valendo por cima do
+   que o tema trouxer.
+   ---------------------------------------------------------- */
+:root {
+    --accent: var(--mira-primary);
+    --bg: var(--mira-bg);
+    --ink: var(--mira-text);
+    --muted: var(--mira-text-soft);
+    --line: var(--mira-card-border);
+    /* quadro 16:9 que cabe inteiro na janela */
+    --fmt-w: min(100vw, calc(100vh * 16 / 9));
+    --fmt-h: calc(var(--fmt-w) * 9 / 16);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { background: #000000; scroll-behavior: smooth; scroll-snap-type: y proximity; }
+/* sem barra de rolagem: ela roubaria largura do quadro e criaria
+   scroll horizontal em tela cheia. Navegue por seta ou roda. */
+html { scrollbar-width: none; overflow-x: hidden; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+
+body {
+    background: #000000;
+    color: var(--ink);
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+body > section {
+    position: relative;
+    width: var(--fmt-w);
+    height: var(--fmt-h);
+    min-height: var(--fmt-h);
+    /* centraliza o quadro: em tela que não é 16:9 a sobra vira
+       faixa cinza acima e abaixo, nunca o slide seguinte */
+    margin: calc((100vh - var(--fmt-h)) / 2) 0;
+    scroll-margin-top: calc((100vh - var(--fmt-h)) / 2);
+    overflow: hidden;
+    background: var(--bg);
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    isolation: isolate;
+}
+
+/* DIRETIVA DA CAPA: o título do primeiro slide nunca quebra
+   deixando artigo ou preposição sozinho na linha de baixo. */
+body > section:first-of-type h1,
+body > section:first-of-type h2 { text-wrap: balance; }
+
+h1 { font-size: clamp(34px, 7.4vh, 72px); line-height: 1.02; letter-spacing: -.02em; font-weight: 800; }
+h2 { font-size: clamp(28px, 4.6vh, 46px); line-height: 1.1; letter-spacing: -.01em; font-weight: 800; }
+p  { font-size: clamp(15px, 2vh, 20px); line-height: 1.5; color: var(--muted); }
+.accent { color: var(--accent); }
+
+/* ---------- capa e encerramento: texto centrado no quadro ---------- */
+.slide-centro {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 50px;
+    text-align: center;
+}
+.slide-centro .marca {
+    font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--mira-text-softer);
+}
+
+/* ---------- slide de conteúdo: título em cima, animação no resto ---------- */
+.slide-main {
+    width: 100%;
+    height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 50px;              /* área segura */
+}
+/* o título fica POR CIMA do palco, que agora passa por baixo dele.
+   z-index 10 é o teto deste template; mira-draw e mira-edit vivem em
+   99998 e acima, e continuam por cima do título de propósito, senão
+   não daria para desenhar nem editar sobre ele. */
+.slide-main h2 {
+    flex: 0 0 auto;
+    margin-bottom: 14px;
+    text-align: center;
+    position: relative;
+    z-index: 10;
+}
+
+/* o palco: O QUADRO INTEIRO, de borda a borda.
+
+   `inset: 0` resolve contra a <section>, porque o .slide-main é
+   estático e a <section> é `position: relative`. Sair do fluxo é o
+   que faz o palco passar POR BAIXO do título em vez de começar
+   depois dele.
+
+   Os resets de fundo e raio não são enfeite. Quando o
+   "new --theme=..." injeta o base.css, ele traz `.anim-stage` com
+   altura fixa (clamp 400-620px), glow radial e cantos arredondados,
+   que é a linguagem de CARD. Aqui o palco É o slide: sem neutralizar
+   isso, o deck gerado sai com uma caixinha arredondada no meio, que
+   é exatamente o que este template existe para não ser. */
+.anim-stage {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    background: none;
+    border-radius: 0;
+}
+.anim-stage svg { width: 100%; height: 100%; display: block; }
+
+/* @MIRA:RESPONSIVE:START */
+/* ============================================================
+   MIRA — responsive.css  (camada de reflow mobile-first)
+   Objetivo: TODO slide 16:9 do Mira vira legível no celular em
+   retrato SEM arquivo mobile separado. O mesmo deck se reorganiza:
+   fontes encolhem, grids empilham, padding reduz, palcos escalam.
+
+   Estratégia: os decks nascem "desktop-first" (classes Tailwind com
+   tamanhos fixos: text-6xl, p-10, ...). Esta camada sobrescreve essas
+   classes abaixo de 640px. Usa !important de propósito — precisa
+   vencer o Tailwind CDN (injetado em runtime) em decks legados sem
+   reescrever o HTML. Os clamps têm teto ~= valor desktop, então em
+   telas largas nada muda; só encolhem no estreito.
+   ============================================================ */
+
+/* Guarda universal contra overflow horizontal (o "print cortado" no zap). */
+html, body { max-width: 100%; overflow-x: hidden; }
+img, svg, video, canvas, iframe, table, pre { max-width: 100%; }
+
+@media (max-width: 640px) {
+
+  /* --- Tipografia fluida: encolhe títulos gigantes no celular --- */
+  .text-9xl { font-size: clamp(3rem, 12vw, 5rem)      !important; line-height: 1.05 !important; }
+  .text-8xl { font-size: clamp(2.75rem, 11vw, 4.5rem) !important; line-height: 1.06 !important; }
+  .text-7xl { font-size: clamp(2.25rem, 10vw, 3.75rem)!important; line-height: 1.08 !important; }
+  .text-6xl { font-size: clamp(2rem, 9vw, 3rem)       !important; line-height: 1.1  !important; }
+  .text-5xl { font-size: clamp(1.75rem, 8vw, 2.5rem)  !important; line-height: 1.12 !important; }
+  .text-4xl { font-size: clamp(1.5rem, 7vw, 2rem)     !important; line-height: 1.15 !important; }
+  .text-3xl { font-size: clamp(1.35rem, 6vw, 1.75rem) !important; line-height: 1.2  !important; }
+  .text-2xl { font-size: clamp(1.2rem, 5vw, 1.5rem)   !important; line-height: 1.25 !important; }
+  .text-xl  { font-size: clamp(1.05rem, 4.5vw, 1.25rem)!important; line-height: 1.3 !important; }
+
+  /* Títulos: quebram entre palavras; só partem uma palavra se ela sozinha
+     estourar a largura. Sem hyphens:auto — em PT ele hifena no meio
+     ("pode-rosas") e fica feio em título de display. */
+  h1, h2, h3 { overflow-wrap: break-word; }
+
+  /* --- Espaçamento: paddings de desktop sufocam o celular --- */
+  .p-12 { padding: 1.25rem !important; }
+  .p-10 { padding: 1.15rem !important; }
+  .p-8  { padding: 1.05rem !important; }
+  .px-12, .px-10 { padding-left: 1.15rem !important; padding-right: 1.15rem !important; }
+  .px-8 { padding-left: 1rem !important; padding-right: 1rem !important; }
+  .py-16 { padding-top: 2.5rem !important; padding-bottom: 2.5rem !important; }
+  .gap-8 { gap: 1rem !important; }
+  .gap-10, .gap-12 { gap: 1.25rem !important; }
+
+  /* --- Layout: seção de slide sempre alcançável pelo topo ---
+     min-h-screen + justify-center clipa o topo quando o conteúdo é
+     maior que a tela. No celular, ancora no topo e deixa rolar. */
+  .min-h-screen {
+    min-height: 100dvh !important;
+    height: auto !important;
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+  }
+  .min-h-screen.justify-center,
+  .min-h-screen.items-center { justify-content: flex-start !important; }
+
+  /* --- Grids/flex de 2+ colunas empilham (redundante ao md: do
+         Tailwind, mas cobre grids sem breakpoint declarado). --- */
+  .grid-cols-2, .grid-cols-3, .grid-cols-4 { grid-template-columns: 1fr !important; }
+
+  /* --- Palco de animação (D3/SVG/canvas): nunca estoura a largura,
+         mantém proporção e encolhe a altura. --- */
+  .anim-stage {
+    max-width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 16 / 9;
+    min-height: 0 !important;
+  }
+
+  /* --- Tabelas: fonte menor + rolagem horizontal se precisar. --- */
+  table { font-size: 0.82rem !important; }
+  .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+
+  /* --- Controles flutuantes respeitam a safe-area do iPhone. --- */
+  #mira-next, #next-card {
+    bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+    right: max(1rem, env(safe-area-inset-right)) !important;
+    width: 44px !important; height: 44px !important;
+  }
+}
+/* @MIRA:RESPONSIVE:END */
+</style>
+</head>
+<body>
+
+<!-- === SLIDE 1 · CAPA === -->
+<section>
+    <div class="slide-centro">
+        <span class="marca">Programação em Python · Módulo 06 · ITEAM Boa Vista</span>
+        <h1>Aula 02: tipos e <span class="accent">operadores</span></h1>
+        <p>Cinco metáforas para entender o que o Python faz com cada valor.</p>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>Quem tem tipo é <span class="accent">o valor</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-bagagem" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>Três jeitos de <span class="accent">dividir</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-ovos" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>Quem é atendido <span class="accent">primeiro</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-triagem" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>Texto não é <span class="accent">número</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-foto" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<section>
+    <div class="slide-main">
+        <h2>f-string muda só <span class="accent">a vitrine</span></h2>
+        <!-- @MIRA:SIZE 3/10 -->
+        <div class="anim-stage"><svg id="stage-recibo" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+</section>
+
+<!-- === ENCERRAMENTO === -->
+<section>
+    <div class="slide-centro">
+        <span class="marca">Próxima aula · 04/11</span>
+        <h2>Estruturas <span class="accent">condicionais</span></h2>
+        <p>Com as comparações de hoje, o programa vai começar a tomar decisões.</p>
+    </div>
+</section>
+
+<script>
+/* ==============================================================
+   Aula 02 · Tipos e operadores: cinco metáforas animadas.
+
+   Cada cena é uma função do tempo dentro do ciclo (t, em segundos):
+   o regente zera o relógio quando o slide entra, então a turma
+   sempre vê a história desde o começo. Todo texto de código e de
+   saída abaixo é o que o Python 3.12 realmente executa e imprime
+   (conferido no aula_02.py da Turma 2).
+   ============================================================== */
+(function () {
+    'use strict';
+
+    /* A cor sai do TEMA, nunca fixa no código. */
+    function cor(nome, reserva) {
+        var v = getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+        return v || reserva;
+    }
+    var COR = {
+        marca: cor('--mira-primary', '#5B9BF5'),
+        acento: cor('--mira-accent-2', '#94BEF9'),
+        tinta: cor('--mira-text', '#ffffff'),
+        fundo: cor('--mira-bg', '#000000'),
+        ok: cor('--mira-crop', '#35D07F'),
+        erro: '#FF6B6B',                       /* só para erro, nunca decoração */
+        suave: 'rgba(255,255,255,.66)',
+        fraco: 'rgba(255,255,255,.32)',
+        linha: 'rgba(255,255,255,.14)',
+        painel: 'rgba(255,255,255,.045)',
+        papel: '#F4F7FC',
+        escuro: '#0B1220'
+    };
+    var MONO = "Consolas, 'Cascadia Mono', 'JetBrains Mono', 'DejaVu Sans Mono', monospace";
+    var SANS = "'Inter', system-ui, sans-serif";
+
+    /* ---------- regente (do template mira-default) ---------- */
+    function reger(svgId, quadro) {
+        var svg = document.getElementById(svgId);
+        var slide = svg && svg.closest('section');
+        if (!slide || typeof IntersectionObserver !== 'function') {
+            d3.timer(function (ms) { quadro(ms); });
+            return;
+        }
+        var relogio = null, visivel = false;
+        d3.timer(function (ms) {
+            if (!visivel) { quadro(0); return; }
+            if (relogio === null) relogio = ms;
+            quadro(ms - relogio);
+        });
+        new IntersectionObserver(function (entradas) {
+            entradas.forEach(function (e) {
+                if (e.isIntersecting === visivel) return;
+                visivel = e.isIntersecting;
+                relogio = null;
+            });
+        }, { threshold: 0.6 }).observe(slide);
+    }
+
+    /* ---------- palco (do template mira-default) ---------- */
+    function palco(svgId) {
+        var svg = d3.select('#' + svgId);
+        if (svg.empty()) return null;
+        var caixa = svg.node().closest('.anim-stage');
+        var secao = caixa && caixa.closest ? caixa.closest('section') : null;
+        var titulo = secao && secao.querySelector
+            ? secao.querySelector('.slide-main h2, .slide-main h1')
+            : null;
+        var RESPIRO = 18;
+        var F = { W: 960, H: 460, topo: 0, alturaUtil: 460 };
+        F.vy = function (k) { return F.topo + F.alturaUtil * k; };
+
+        function casar() {
+            var r = caixa.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) F.H = Math.round(F.W * r.height / r.width);
+            svg.attr('viewBox', '0 0 ' + F.W + ' ' + F.H);
+            F.topo = 0;
+            if (titulo && titulo.getBoundingClientRect && r.height > 0) {
+                var t = titulo.getBoundingClientRect();
+                var basePx = Math.max(0, (t.bottom || 0) - (r.top || 0));
+                F.topo = Math.round(F.H * basePx / r.height) + RESPIRO;
+                F.topo = Math.min(F.topo, Math.round(F.H * 0.40));
+            }
+            F.alturaUtil = F.H - F.topo;
+        }
+        casar();
+        window.addEventListener('resize', casar);
+        svg.selectAll('*').remove();
+        return { svg: svg, F: F };
+    }
+
+    /* ---------- tempo ---------- */
+    function lim(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+    function fase(t, a, b) { return lim((t - a) / (b - a)); }
+    function mix(a, b, k) { return a + (b - a) * k; }
+    /* aparece em a, some em b, com rampas de r segundos */
+    function janela(t, a, b, r) { r = r || .3; return Math.min(fase(t, a, a + r), 1 - fase(t, b - r, b)); }
+    /* deslocamento de objeto: explode e assenta com cauda longa */
+    var EA = (window.miraMotionBlur && window.miraMotionBlur.explodeAssenta)
+        ? window.miraMotionBlur.explodeAssenta(.45, 9) : d3.easeCubicOut;
+    var SUAVE = d3.easeSinInOut;
+    /* quadros-chave [[t, v], ...] com explode-assenta entre eles */
+    function kf(t, lista) {
+        if (t <= lista[0][0]) return lista[0][1];
+        for (var i = 1; i < lista.length; i++) {
+            if (t <= lista[i][0]) {
+                var a = lista[i - 1], b = lista[i];
+                return mix(a[1], b[1], EA(fase(t, a[0], b[0])));
+            }
+        }
+        return lista[lista.length - 1][1];
+    }
+    /* texto sendo digitado: corta a string pelo progresso */
+    function digitado(texto, k) { return texto.slice(0, Math.round(texto.length * lim(k))); }
+
+    /* ---------- cena: monta uma vez, refaz se o palco mudar de tamanho ---------- */
+    function cena(svgId, cicloMs, construir) {
+        var p = palco(svgId); if (!p) return;
+        var chave = null, quadro = null, raiz = null;
+        reger(svgId, function (ms) {
+            var k = p.F.H + '|' + p.F.topo;
+            if (k !== chave) {
+                chave = k;
+                p.svg.selectAll('*').remove();
+                raiz = p.svg.append('g');
+                quadro = construir(raiz, p.F);
+            }
+            /* entrada coreografada: a cena sobe e acende no primeiro segundo */
+            var e = d3.easeCubicOut(fase(ms, 0, 900));
+            raiz.attr('opacity', e).attr('transform', 'translate(0,' + (1 - e) * 14 + ')');
+            quadro((ms % cicloMs) / 1000, ms / 1000);
+        });
+    }
+
+    /* ---------- peças comuns ---------- */
+    function rotulo(g, x, y, texto, ancora) {
+        return g.append('text').attr('x', x).attr('y', y)
+            .attr('text-anchor', ancora || 'start')
+            .attr('font-family', SANS).attr('font-size', 12).attr('font-weight', 700)
+            .attr('letter-spacing', '.14em').attr('fill', COR.fraco).text(texto.toUpperCase());
+    }
+    function painel(g, x, y, w, h, titulo, escuro) {
+        var p = g.append('g').attr('transform', 'translate(' + x + ',' + y + ')');
+        p.append('rect').attr('width', w).attr('height', h).attr('rx', 12)
+            .attr('fill', escuro ? 'rgba(5,9,18,.92)' : COR.painel)
+            .attr('stroke', COR.linha);
+        if (titulo) rotulo(p, 4, -10, titulo);
+        return p;
+    }
+    /* bloco de código numerado, com faixa de realce que anda de linha em linha */
+    function codigo(g, x, y, w, linhas, tam, titulo) {
+        var lh = Math.round(tam * 1.7), h = linhas.length * lh + 20;
+        var p = painel(g, x, y, w, h, titulo);
+        var realce = p.append('rect').attr('x', 6).attr('width', w - 12).attr('height', lh)
+            .attr('rx', 6).attr('opacity', 0);
+        var txt = linhas.map(function (l, i) {
+            var yy = 10 + i * lh + lh * .68;
+            p.append('text').attr('x', 14).attr('y', yy).attr('font-family', MONO)
+                .attr('font-size', tam * .8).attr('fill', COR.fraco).text(i + 1);
+            return p.append('text').attr('x', 40).attr('y', yy).attr('font-family', MONO)
+                .attr('font-size', tam).attr('fill', COR.tinta).attr('xml:space', 'preserve').text(l);
+        });
+        return {
+            h: h, lh: lh, g: p, linhas: txt,
+            yLinha: function (i) { return y + 10 + i * lh + lh / 2; },
+            realce: function (i, k, c) {
+                if (i < 0 || k <= 0) { realce.attr('opacity', 0); return; }
+                realce.attr('y', 10 + i * lh).attr('fill', c || COR.marca).attr('opacity', .26 * k);
+            }
+        };
+    }
+    /* terminal com n linhas, cada uma ligada e desligada por quadro */
+    function terminal(g, x, y, w, n, tam, titulo) {
+        var lh = Math.round(tam * 1.75), h = n * lh + 20;
+        var p = painel(g, x, y, w, h, titulo || 'terminal', true);
+        var ls = [];
+        for (var i = 0; i < n; i++) {
+            ls.push(p.append('text').attr('x', 14).attr('y', 10 + i * lh + lh * .68)
+                .attr('font-family', MONO).attr('font-size', tam).attr('xml:space', 'preserve')
+                .attr('fill', COR.tinta).attr('opacity', 0));
+        }
+        var cursor = p.append('rect').attr('width', tam * .55).attr('height', tam * 1.1)
+            .attr('fill', COR.tinta).attr('opacity', 0);
+        return {
+            h: h, lh: lh,
+            set: function (i, texto, op, c) {
+                ls[i].text(texto).attr('opacity', op).attr('fill', c || COR.tinta);
+            },
+            /* cursor piscando logo depois do texto da linha i */
+            cursor: function (i, chars, op) {
+                cursor.attr('x', 14 + chars * tam * .55 + 2).attr('y', 10 + i * lh + lh * .68 - tam * .9)
+                    .attr('opacity', op);
+            }
+        };
+    }
+    /* engrenagem flat, desenhada centrada em (0,0) */
+    function pathEngrenagem(r, dentes) {
+        var pts = [], n = dentes * 4;
+        for (var i = 0; i < n; i++) {
+            var a = i / n * Math.PI * 2, rr = (i % 4 < 2) ? r : r * .78;
+            pts.push([Math.cos(a) * rr, Math.sin(a) * rr]);
+        }
+        return 'M' + pts.map(function (q) { return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join('L') + 'Z';
+    }
+    function largMono(texto, tam) { return texto.length * tam * .6; }
+
+    /* ================================================================
+       2. QUEM TEM TIPO É O VALOR · etiqueta de bagagem e raio-x
+       Causa: a variável é só a etiqueta; o tipo pertence ao valor para
+       onde ela aponta, e type() examina o valor, não o nome.
+       Loop: três malas iguais por fora passam pelo raio-x; a etiqueta
+       "valor" troca de mala a cada atribuição.
+       ================================================================ */
+    function cenaBagagem(svgId) {
+        cena(svgId, 14000, function (raiz, F) {
+            var cod = codigo(raiz, 36, F.vy(.04), 360, [
+                'valor = 20', 'print(type(valor))',
+                'valor = "vinte"', 'print(type(valor))',
+                'valor = 20.0', 'print(type(valor))'], 15, 'o programa');
+            var term = terminal(raiz, 36, F.vy(.04) + cod.h + 40, 360, 3, 15);
+
+            var yb = F.vy(.86), xEnt = 500, xTun = 735, xSai = 905;
+            raiz.append('rect').attr('x', 430).attr('y', yb).attr('width', 510).attr('height', 12)
+                .attr('rx', 6).attr('fill', 'rgba(255,255,255,.08)');
+            var trilho = raiz.append('line').attr('x1', 436).attr('x2', 934).attr('y1', yb + 6).attr('y2', yb + 6)
+                .attr('stroke', COR.fraco).attr('stroke-width', 2).attr('stroke-dasharray', '10 14');
+
+            /* as três malas são idênticas por fora, de propósito */
+            function mala() {
+                var g = raiz.append('g').attr('opacity', 0);
+                g.append('path').attr('d', 'M-16,-62 L-16,-74 Q-16,-80 -10,-80 L10,-80 Q16,-80 16,-74 L16,-62')
+                    .attr('fill', 'none').attr('stroke', COR.acento).attr('stroke-width', 5);
+                g.append('rect').attr('x', -46).attr('y', -64).attr('width', 92).attr('height', 64).attr('rx', 10)
+                    .attr('fill', COR.marca);
+                [-24, 24].forEach(function (dx) {
+                    g.append('rect').attr('x', dx - 3).attr('y', -64).attr('width', 6).attr('height', 64)
+                        .attr('fill', 'rgba(11,18,32,.35)');
+                });
+                return g;
+            }
+            var malas = [mala(), mala(), mala()];
+
+            /* o túnel do raio-x, por cima das malas: o que passa ali dentro fica escondido */
+            var tw = 170, th = 118;
+            raiz.append('rect').attr('x', xTun - tw / 2).attr('y', yb - th).attr('width', tw).attr('height', th)
+                .attr('rx', 12).attr('fill', 'rgba(13,22,38,.86)').attr('stroke', COR.marca).attr('stroke-width', 2);
+            rotulo(raiz, xTun, yb - th + 22, 'raio-x', 'middle');
+            var monY = F.vy(.03), monH = Math.min(F.vy(.52) - monY, 210), monW = 280, monX = xTun - monW / 2;
+            raiz.append('line').attr('x1', xTun).attr('x2', xTun).attr('y1', monY + monH).attr('y2', yb - th)
+                .attr('stroke', COR.linha).attr('stroke-width', 3);
+            var mon = raiz.append('g').attr('transform', 'translate(' + monX + ',' + monY + ')');
+            mon.append('rect').attr('width', monW).attr('height', monH).attr('rx', 12)
+                .attr('fill', '#07101f').attr('stroke', COR.marca).attr('stroke-width', 2);
+            rotulo(mon, 4, -10, 'type() olha dentro da mala');
+            var feixe = mon.append('rect').attr('x', 8).attr('width', monW - 16).attr('height', 4).attr('rx', 2)
+                .attr('fill', COR.acento).attr('opacity', 0);
+            var conteudo = mon.append('text').attr('x', monW / 2).attr('y', monH * .48).attr('text-anchor', 'middle')
+                .attr('font-family', MONO).attr('font-size', 40).attr('font-weight', 700).attr('fill', COR.tinta);
+            var tipo = mon.append('text').attr('x', monW / 2).attr('y', monH * .78).attr('text-anchor', 'middle')
+                .attr('font-family', MONO).attr('font-size', 20).attr('fill', COR.acento);
+            var nota = mon.append('text').attr('x', monW / 2).attr('y', monH - 10).attr('text-anchor', 'middle')
+                .attr('font-family', SANS).attr('font-size', 12).attr('font-style', 'italic')
+                .attr('fill', COR.suave).text('por fora, igual à primeira mala');
+
+            /* a etiqueta "valor": o nome da variável, pendurado na alça */
+            var etq = raiz.append('g').attr('opacity', 0);
+            etq.append('line').attr('x1', 0).attr('y1', 0).attr('x2', 26).attr('y2', 10)
+                .attr('stroke', COR.acento).attr('stroke-width', 2);
+            etq.append('rect').attr('x', -58).attr('y', -14).attr('width', 64).attr('height', 28).attr('rx', 6)
+                .attr('fill', COR.acento);
+            etq.append('circle').attr('cx', -48).attr('cy', 0).attr('r', 3.5).attr('fill', COR.escuro);
+            etq.append('text').attr('x', -22).attr('y', 6).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 15).attr('font-weight', 700).attr('fill', COR.escuro).text('valor');
+
+            var DADOS = [['20', "<class 'int'>"], ['"vinte"', "<class 'str'>"], ['20.0', "<class 'float'>"]];
+            function xMala(t, t0) {
+                if (t < t0 + 1.1) return xEnt;
+                if (t < t0 + 2.9) return mix(xEnt, xTun, EA(fase(t, t0 + 1.1, t0 + 2.0)));
+                return mix(xTun, xSai, EA(fase(t, t0 + 2.9, t0 + 3.5)));
+            }
+            function alca(t, i) { return { x: xMala(t, .6 + i * 3.6) - 44, y: yb - 78 }; }
+
+            return function (t, abs) {
+                trilho.attr('stroke-dashoffset', -abs * 24);
+                var some = 1 - fase(t, 12.6, 13.2);
+                var r = -1, kr = 0, ativo = -1;
+                malas.forEach(function (m, i) {
+                    var t0 = .6 + i * 3.6;
+                    m.attr('transform', 'translate(' + xMala(t, t0) + ',' + yb + ')')
+                        .attr('opacity', t < t0 ? 0 : Math.min(fase(t, t0, t0 + .3), 1 - fase(t, t0 + 3.1, t0 + 3.5)));
+                    if (t >= t0 && t < t0 + 1.9) { r = 2 * i; kr = janela(t, t0, t0 + 1.9, .2); }
+                    if (t >= t0 + 2.0 && t < t0 + 3.3) { r = 2 * i + 1; kr = janela(t, t0 + 2.0, t0 + 3.3, .2); }
+                    if (t >= t0 + 2.0 && t < t0 + 3.6) ativo = i;
+                    term.set(i, DADOS[i][1], fase(t, t0 + 2.7, t0 + 2.9) * some, COR.acento);
+                });
+                cod.realce(r, kr);
+
+                /* a etiqueta acompanha a mala atual; a cada atribuição voa para a próxima */
+                var idx = t < 4.2 ? 0 : t < 7.8 ? 1 : 2, t0 = .6 + idx * 3.6, p;
+                var origem = idx === 0 ? { x: 36 + 110, y: cod.yLinha(0) } : alca(t0 + .2, idx - 1);
+                var k = EA(fase(t, t0 + .2, t0 + 1.0));
+                var alvo = alca(t, idx);
+                p = { x: mix(origem.x, alvo.x, k), y: mix(origem.y, alvo.y, k) - Math.sin(Math.PI * k) * 60 };
+                etq.attr('transform', 'translate(' + p.x + ',' + p.y + ')').attr('opacity', fase(t, .6, .8) * some);
+
+                /* o raio-x varre e mostra o que há dentro */
+                if (ativo >= 0) {
+                    var a0 = .6 + ativo * 3.6 + 2.0;
+                    var varre = fase(t, a0, a0 + .6);
+                    feixe.attr('y', 8 + (monH - 20) * varre).attr('opacity', janela(t, a0, a0 + .65, .1));
+                    var mostra = janela(t, a0 + .45, a0 + 1.55, .2);
+                    conteudo.text(DADOS[ativo][0]).attr('opacity', mostra);
+                    tipo.text(DADOS[ativo][1]).attr('opacity', mostra);
+                    nota.attr('opacity', ativo === 2 ? mostra : 0);
+                } else {
+                    feixe.attr('opacity', 0); conteudo.attr('opacity', 0); tipo.attr('opacity', 0); nota.attr('opacity', 0);
+                }
+            };
+        });
+    }
+
+    /* ================================================================
+       3. TRÊS JEITOS DE DIVIDIR · ovos em caixas de 5
+       Causa: a mesma divisão responde três perguntas: quantas caixas
+       cheias (//), quantos ovos sobram (%) e quanto dá exatamente (/).
+       Loop: 17 ovos caem, três caixas fecham, dois sobram e a quarta
+       caixa fica 40% cheia; as caixas são despachadas e tudo recomeça.
+       ================================================================ */
+    function cenaOvos(svgId) {
+        cena(svgId, 13000, function (raiz, F) {
+            var N = 17, P = 5, cw = 168, gap = 26, x0 = 60, yC = F.vy(.50), slotDx = 32;
+            rotulo(raiz, 40, F.vy(.03), '17 ovos · caixas de 5');
+            /* a cesta de onde os ovos saem */
+            var yCesta = F.vy(.14), xCesta = 480;
+            raiz.append('path').attr('d', 'M' + (xCesta - 110) + ',' + (yCesta - 8) + ' Q' + xCesta + ',' + (yCesta + 70) + ' ' + (xCesta + 110) + ',' + (yCesta - 8) + ' Z')
+                .attr('fill', 'rgba(91,155,245,.14)').attr('stroke', COR.marca).attr('stroke-width', 2);
+
+            function xCaixa(j) { return x0 + j * (cw + gap); }
+            function slot(j, s) { return { x: xCaixa(j) + 20 + s * slotDx, y: yC }; }
+            var caixas = [], tampas = [];
+            for (var j = 0; j < 4; j++) {
+                var g = raiz.append('g');
+                g.append('rect').attr('x', xCaixa(j)).attr('y', yC - 26).attr('width', cw).attr('height', 52).attr('rx', 10)
+                    .attr('fill', 'rgba(91,155,245,.10)').attr('stroke', COR.marca).attr('stroke-width', 2)
+                    .attr('stroke-dasharray', j === 3 ? '6 5' : null);
+                for (var s = 0; s < P; s++) {
+                    g.append('circle').attr('cx', slot(j, s).x).attr('cy', yC + 4).attr('r', 12)
+                        .attr('fill', 'rgba(0,0,0,.35)');
+                }
+                caixas.push(g);
+                if (j < 3) {
+                    var tp = raiz.append('g').attr('opacity', 0);
+                    tp.append('rect').attr('x', xCaixa(j) - 4).attr('y', yC - 32).attr('width', cw + 8).attr('height', 64).attr('rx', 12)
+                        .attr('fill', COR.marca);
+                    tp.append('text').attr('x', xCaixa(j) + cw / 2).attr('y', yC + 7).attr('text-anchor', 'middle')
+                        .attr('font-family', SANS).attr('font-size', 17).attr('font-weight', 800)
+                        .attr('fill', COR.escuro).text('caixa ' + (j + 1));
+                    tampas.push(tp);
+                }
+            }
+            /* barra de quanto da quarta caixa está ocupado: 2 de 5 = 0.4 */
+            var bx = xCaixa(3), byy = yC + 40;
+            var barraFundo = raiz.append('rect').attr('x', bx).attr('y', byy).attr('width', cw).attr('height', 10).attr('rx', 5)
+                .attr('fill', 'rgba(255,255,255,.08)');
+            var barra = raiz.append('rect').attr('x', bx).attr('y', byy).attr('height', 10).attr('rx', 5).attr('fill', COR.acento);
+            var barraTxt = raiz.append('text').attr('x', bx + cw / 2).attr('y', byy + 32).attr('text-anchor', 'middle')
+                .attr('font-family', MONO).attr('font-size', 15).attr('fill', COR.acento).text('0.4 de caixa');
+
+            var ovos = [];
+            for (var k = 0; k < N; k++) {
+                var o = raiz.append('ellipse').attr('rx', 11).attr('ry', 14).attr('fill', '#F3EBDD')
+                    .attr('stroke', '#CDBFA6').attr('stroke-width', 1);
+                var ini = { x: xCesta - 70 + (k * 37) % 140, y: yCesta - 4 + (k % 3) * 9 };
+                var fim = k < 15 ? slot(Math.floor(k / P), k % P) : { x: xCaixa(3) + cw + 34 + (k - 15) * 34, y: yC };
+                ovos.push({ el: o, ini: ini, fim: fim, t: .6 + k * .22 });
+            }
+            /* a tampa fecha POR CIMA dos ovos */
+            tampas.forEach(function (tp) { tp.raise(); });
+
+            /* os três resultados */
+            var yR = F.vy(.86), chips = [
+                ['17 // 5', '3', 'caixas cheias'], ['17 % 5', '2', 'ovos que sobram'], ['17 / 5', '3.4', 'divisão exata (float)']
+            ].map(function (c, i) {
+                var g = raiz.append('g').attr('transform', 'translate(' + (60 + i * 285) + ',' + yR + ')').attr('opacity', 0);
+                g.append('rect').attr('width', 265).attr('height', 48).attr('y', -30).attr('rx', 10)
+                    .attr('fill', 'rgba(255,255,255,.05)').attr('stroke', COR.linha);
+                g.append('text').attr('x', 14).attr('y', 2).attr('font-family', MONO).attr('font-size', 19)
+                    .attr('fill', COR.tinta).text(c[0] + ' = ');
+                g.append('text').attr('x', 14 + (c[0].length + 3) * 11.4).attr('y', 2).attr('font-family', MONO)
+                    .attr('font-size', 22).attr('font-weight', 800).attr('fill', COR.acento).text(c[1]);
+                g.append('text').attr('x', 0).attr('y', 40).attr('font-family', SANS).attr('font-size', 13)
+                    .attr('fill', COR.suave).text(c[2]);
+                return g;
+            });
+
+            return function (t) {
+                var despacha = EA(fase(t, 11.0, 12.0)), some = 1 - fase(t, 11.2, 12.0);
+                var volta = fase(t, 12.3, 12.8);
+                var dx = t < 12.3 ? despacha * 60 : 0;
+                caixas.forEach(function (c, j) {
+                    var op = j === 3 ? fase(t, 7.0, 7.4) : 1;
+                    c.attr('transform', 'translate(' + dx + ',0)').attr('opacity', op * (t >= 11.0 ? some : 1) + (t >= 12.3 && j < 3 ? volta : 0));
+                });
+                tampas.forEach(function (tp, j) {
+                    var a = 4.8 + j * .4, k = SUAVE(fase(t, a, a + .35));
+                    tp.attr('transform', 'translate(' + dx + ',' + (-30 * (1 - k)) + ')').attr('opacity', k * some);
+                });
+                ovos.forEach(function (o, k) {
+                    var q = fase(t, o.t, o.t + .5);
+                    var x = mix(o.ini.x, o.fim.x, q), y = mix(o.ini.y, o.fim.y, d3.easeQuadIn(q)) - Math.sin(Math.PI * q) * 30;
+                    var rot = 0;
+                    if (k >= 15) {
+                        /* os dois que sobram: tremem, depois entram na quarta caixa */
+                        rot = 9 * Math.sin(t * 16) * janela(t, 6.2, 6.9, .1);
+                        var m = EA(fase(t, 7.5 + (k - 15) * .2, 8.2 + (k - 15) * .2));
+                        var dst = slot(3, k - 15);
+                        x = mix(x, dst.x, m); y = mix(y, dst.y, m) - Math.sin(Math.PI * m) * 24;
+                    }
+                    var op = t < 11.0 ? 1 : (k < 15 ? 0 : some);
+                    if (t >= 12.3) { x = o.ini.x; y = o.ini.y; op = volta; }
+                    o.el.attr('transform', 'translate(' + (x + (t < 12.3 ? dx : 0)) + ',' + y + ') rotate(' + rot + ')').attr('opacity', op);
+                });
+                barra.attr('width', cw * .4 * SUAVE(fase(t, 8.4, 9.0))).attr('opacity', some).attr('transform', 'translate(' + dx + ',0)');
+                barraFundo.attr('opacity', fase(t, 8.2, 8.4) * some).attr('transform', 'translate(' + dx + ',0)');
+                barraTxt.attr('opacity', fase(t, 8.9, 9.1) * some).attr('transform', 'translate(' + dx + ',0)');
+                chips[0].attr('opacity', fase(t, 6.0, 6.3) * some);
+                chips[1].attr('opacity', fase(t, 6.7, 7.0) * some);
+                chips[2].attr('opacity', fase(t, 9.1, 9.4) * some);
+            };
+        });
+    }
+
+    /* ================================================================
+       4. QUEM É ATENDIDO PRIMEIRO · triagem do pronto-socorro
+       Causa: numa expressão, os operadores são atendidos por prioridade,
+       não por ordem de chegada; parênteses passam na frente de tudo.
+       Loop: a + b * 2 vira 18 (e não 28); (a + b) * 2 chega de
+       ambulância e vira 28.
+       ================================================================ */
+    function cenaTriagem(svgId) {
+        cena(svgId, 14000, function (raiz, F) {
+            var cx = 430;
+            raiz.append('text').attr('x', 36).attr('y', F.vy(.04)).attr('font-family', MONO).attr('font-size', 17)
+                .attr('fill', COR.suave).attr('xml:space', 'preserve').text('a = 10    b = 4');
+            /* placa da triagem: cruz flat + nome */
+            var placa = raiz.append('g').attr('transform', 'translate(' + cx + ',' + F.vy(.05) + ')');
+            placa.append('path').attr('d', 'M-6,-18 h12 v12 h12 v12 h-12 v12 h-12 v-12 h-12 v-12 h12 Z')
+                .attr('transform', 'translate(-70,0)').attr('fill', COR.marca);
+            placa.append('text').attr('x', -44).attr('y', 7).attr('font-family', SANS).attr('font-size', 18)
+                .attr('font-weight', 800).attr('letter-spacing', '.18em').attr('fill', COR.acento).text('TRIAGEM');
+
+            var term = terminal(raiz, 740, F.vy(.40), 190, 2, 24);
+
+            function ficha(txt, x, y, larg, tipo) {
+                var g = raiz.append('g').attr('opacity', 0);
+                g.append('rect').attr('x', -larg / 2).attr('y', -28).attr('width', larg).attr('height', 56).attr('rx', 10)
+                    .attr('fill', tipo === 'num' ? '#0d1626' : 'rgba(148,190,249,.12)')
+                    .attr('stroke', tipo === 'num' ? COR.marca : COR.acento).attr('stroke-width', 2);
+                g.append('text').attr('y', 9).attr('text-anchor', 'middle').attr('font-family', MONO)
+                    .attr('font-size', 26).attr('font-weight', 700).attr('fill', tipo === 'num' ? COR.tinta : COR.acento).text(txt);
+                return { g: g, x: x, y: y };
+            }
+            function linha(tokens, y) {
+                var L = tokens.map(function (tk) { return tk === '(' || tk === ')' ? 36 : 58; });
+                var total = L.reduce(function (a, b) { return a + b + 10; }, -10), x = cx - total / 2;
+                return tokens.map(function (tk, i) {
+                    var f = ficha(tk, x + L[i] / 2, y, L[i], /\d/.test(tk) ? 'num' : 'op');
+                    x += L[i] + 10;
+                    return f;
+                });
+            }
+            function pulseira(texto, forte) {
+                var g = raiz.append('g').attr('opacity', 0);
+                g.append('rect').attr('x', -24).attr('y', -12).attr('width', 48).attr('height', 24).attr('rx', 12)
+                    .attr('fill', forte ? COR.acento : 'rgba(255,255,255,.18)');
+                g.append('text').attr('y', 5).attr('text-anchor', 'middle').attr('font-family', SANS).attr('font-size', 13)
+                    .attr('font-weight', 800).attr('fill', forte ? COR.escuro : COR.tinta).text(texto);
+                return g;
+            }
+
+            var y1 = F.vy(.24), y2 = F.vy(.77);
+            raiz.append('text').attr('x', 36).attr('y', y1 + 8).attr('font-family', MONO).attr('font-size', 16)
+                .attr('fill', COR.suave).text('a + b * 2');
+            raiz.append('text').attr('x', 36).attr('y', y2 + 8).attr('font-family', MONO).attr('font-size', 16)
+                .attr('fill', COR.suave).text('(a + b) * 2');
+            var L1 = linha(['10', '+', '4', '*', '2'], y1);
+            var L2 = linha(['(', '10', '+', '4', ')', '*', '2'], y2);
+            var oito = ficha('8', L1[3].x, y1, 58, 'num'), dezoito = ficha('18', (L1[0].x + L1[3].x) / 2, y1, 70, 'num');
+            var c14 = (L2[0].x + L2[4].x) / 2;
+            var quatorze = ficha('14', c14, y2, 70, 'num'), vinteOito = ficha('28', (c14 + L2[6].x) / 2, y2, 70, 'num');
+            var p1a = pulseira('1º', true), p1b = pulseira('2º', false), p2b = pulseira('2º', false);
+
+            /* contrafactual: a fila por ordem de chegada daria outro número */
+            var fantasma = raiz.append('g').attr('opacity', 0);
+            fantasma.append('text').attr('x', cx).attr('y', y1 + 72).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 15).attr('fill', COR.erro).text('por ordem de chegada: (10 + 4) * 2 = 28');
+            fantasma.append('line').attr('x1', cx - 175).attr('x2', cx + 175).attr('y1', y1 + 67).attr('y2', y1 + 67)
+                .attr('stroke', COR.erro).attr('stroke-width', 2);
+
+            /* a ambulância: sirene flat sobre os parênteses */
+            var sx = c14, sirene = raiz.append('g').attr('transform', 'translate(' + sx + ',' + (y2 - 62) + ')').attr('opacity', 0);
+            var raios = sirene.append('g');
+            [[-1, -1], [1, -1]].forEach(function (d) {
+                raios.append('path').attr('d', 'M' + (d[0] * 16) + ',-10 L' + (d[0] * 44) + ',-26 L' + (d[0] * 44) + ',2 Z')
+                    .attr('fill', COR.acento).attr('opacity', .5);
+            });
+            sirene.append('path').attr('d', 'M-14,4 L-14,-8 A14,14 0 0 1 14,-8 L14,4 Z').attr('fill', COR.erro);
+            sirene.append('rect').attr('x', -20).attr('y', 4).attr('width', 40).attr('height', 8).attr('rx', 3).attr('fill', COR.suave);
+            sirene.append('text').attr('x', 0).attr('y', -30).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 12).attr('font-weight', 700).attr('fill', COR.acento).text('parênteses: atende primeiro');
+
+            function pos(f, x, y, op, s) {
+                f.g.attr('transform', 'translate(' + x + ',' + y + ') scale(' + (s || 1) + ')').attr('opacity', op);
+            }
+            /* funde as fichas idx no centro c; a nova aparece no fim */
+            function fundir(L, idx, c, t, a) {
+                var k = EA(fase(t, a, a + .6));
+                idx.forEach(function (i) { pos(L[i], mix(L[i].x, c, k), L[i].y, (1 - fase(t, a + .35, a + .6)) * L[i].vis); });
+            }
+
+            return function (t, abs) {
+                var some = 1 - fase(t, 12.4, 13.2);
+                /* linha 1 chega, fichas de uma em uma */
+                L1.forEach(function (f, i) { f.vis = fase(t, .4 + i * .12, .7 + i * .12) * some; pos(f, f.x, f.y, f.vis); });
+                p1a.attr('transform', 'translate(' + L1[3].x + ',' + (y1 + 44 - 16 * (1 - SUAVE(fase(t, 1.3, 1.7)))) + ')')
+                    .attr('opacity', fase(t, 1.3, 1.6) * (1 - fase(t, 2.5, 2.8)));
+                p1b.attr('transform', 'translate(' + L1[1].x + ',' + (y1 + 44 - 16 * (1 - SUAVE(fase(t, 1.6, 2.0)))) + ')')
+                    .attr('opacity', fase(t, 1.6, 1.9) * (1 - fase(t, 4.3, 4.6)));
+                /* 1º atendimento: 4 * 2 vira 8 */
+                fundir(L1, [2, 3, 4], L1[3].x, t, 2.6);
+                if (t >= 2.6) { [0, 1].forEach(function (i) { pos(L1[i], L1[i].x, y1, L1[i].vis); }); }
+                pos(oito, oito.x, y1, fase(t, 3.2, 3.5) * (1 - fase(t, 4.75, 5.0)) * some, mix(.8, 1, SUAVE(fase(t, 3.2, 3.6))));
+                /* 2º atendimento: 10 + 8 vira 18 */
+                if (t >= 4.4) {
+                    var k = EA(fase(t, 4.4, 5.0)), c = dezoito.x;
+                    pos(L1[0], mix(L1[0].x, c, k), y1, (1 - fase(t, 4.75, 5.0)) * L1[0].vis);
+                    pos(L1[1], mix(L1[1].x, c, k), y1, (1 - fase(t, 4.75, 5.0)) * L1[1].vis);
+                    oito.g.attr('transform', 'translate(' + mix(oito.x, c, k) + ',' + y1 + ')');
+                }
+                pos(dezoito, dezoito.x, y1, fase(t, 4.9, 5.2) * some, mix(.8, 1, SUAVE(fase(t, 4.9, 5.3))));
+                term.set(0, '18', fase(t, 5.4, 5.6) * some, COR.acento);
+                fantasma.attr('opacity', fase(t, 5.7, 6.1) * some);
+
+                /* linha 2: os parênteses chegam de ambulância */
+                L2.forEach(function (f, i) { f.vis = fase(t, 6.6 + i * .1, 6.9 + i * .1) * some; pos(f, f.x, f.y, f.vis); });
+                sirene.attr('opacity', fase(t, 7.2, 7.5) * (1 - fase(t, 8.8, 9.1)));
+                raios.attr('opacity', .4 + .6 * Math.abs(Math.sin(abs * 5)));
+                p2b.attr('transform', 'translate(' + L2[5].x + ',' + (y2 + 44 - 16 * (1 - SUAVE(fase(t, 7.6, 8.0)))) + ')')
+                    .attr('opacity', fase(t, 7.6, 7.9) * (1 - fase(t, 9.5, 9.8)));
+                fundir(L2, [0, 1, 2, 3, 4], c14, t, 8.2);
+                pos(quatorze, c14, y2, fase(t, 8.8, 9.1) * (1 - fase(t, 9.95, 10.2)) * some, mix(.8, 1, SUAVE(fase(t, 8.8, 9.2))));
+                if (t >= 9.6) {
+                    var k2 = EA(fase(t, 9.6, 10.2)), c2 = vinteOito.x;
+                    quatorze.g.attr('transform', 'translate(' + mix(c14, c2, k2) + ',' + y2 + ')');
+                    pos(L2[5], mix(L2[5].x, c2, k2), y2, (1 - fase(t, 9.95, 10.2)) * L2[5].vis);
+                    pos(L2[6], mix(L2[6].x, c2, k2), y2, (1 - fase(t, 9.95, 10.2)) * L2[6].vis);
+                }
+                pos(vinteOito, vinteOito.x, y2, fase(t, 10.1, 10.4) * some, mix(.8, 1, SUAVE(fase(t, 10.1, 10.5))));
+                term.set(1, '28', fase(t, 10.6, 10.8) * some, COR.acento);
+            };
+        });
+    }
+
+    /* ================================================================
+       5. TEXTO NÃO É NÚMERO · foto de dinheiro x nota de verdade
+       Causa: input() devolve texto; + entre textos cola um no outro.
+       int() troca o texto por um número, e só então + soma.
+       Loop: duas fotos viram a colagem "1020"; no caixa int() viram
+       notas de verdade e somam 30.
+       ================================================================ */
+    function cenaFoto(svgId) {
+        cena(svgId, 13000, function (raiz, F) {
+            var cod = codigo(raiz, 36, F.vy(.04), 410, [
+                'a = input("Primeiro número: ")',
+                'b = input("Segundo número: ")',
+                'print(a + b)',
+                'print(int(a) + int(b))'], 15, 'o programa');
+            var term = terminal(raiz, 36, F.vy(.04) + cod.h + 40, 410, 4, 15);
+            var yF = F.vy(.20), xA = 590, xB = 790, xMeio = 690;
+
+            function foto(valor) {
+                var g = raiz.append('g').attr('opacity', 0);
+                g.append('rect').attr('x', -64).attr('y', -70).attr('width', 128).attr('height', 140).attr('rx', 4)
+                    .attr('fill', COR.papel);
+                g.append('rect').attr('x', -54).attr('y', -60).attr('width', 108).attr('height', 76).attr('fill', '#AEB8C8');
+                /* a nota fotografada: só uma imagem, cinza e sem valor de verdade */
+                g.append('rect').attr('x', -40).attr('y', -46).attr('width', 80).attr('height', 46).attr('rx', 4)
+                    .attr('fill', '#8C97AA');
+                g.append('text').attr('y', -15).attr('text-anchor', 'middle').attr('font-family', SANS)
+                    .attr('font-size', 22).attr('font-weight', 800).attr('fill', '#C9D1DE').text(valor);
+                g.append('text').attr('y', 48).attr('text-anchor', 'middle').attr('font-family', MONO)
+                    .attr('font-size', 20).attr('font-weight', 700).attr('fill', COR.escuro).text('"' + valor + '"');
+                return g;
+            }
+            var fA = foto('10'), fB = foto('20');
+            var fita = raiz.append('rect').attr('x', xMeio - 22).attr('y', yF - 82).attr('width', 44).attr('height', 22)
+                .attr('fill', 'rgba(148,190,249,.65)').attr('transform', 'rotate(-8,' + xMeio + ',' + (yF - 71) + ')').attr('opacity', 0);
+            var colagem = raiz.append('g').attr('transform', 'translate(' + xMeio + ',' + (yF + 102) + ')').attr('opacity', 0);
+            colagem.append('rect').attr('x', -60).attr('y', -18).attr('width', 120).attr('height', 34).attr('rx', 8)
+                .attr('fill', 'rgba(148,190,249,.14)').attr('stroke', COR.acento);
+            colagem.append('text').attr('y', 7).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 20).attr('font-weight', 700).attr('fill', COR.acento).text('"1020"');
+
+            /* o caixa int(): entra foto, sai dinheiro de verdade */
+            var yCx = F.vy(.62);
+            var caixa = raiz.append('g').attr('transform', 'translate(' + xMeio + ',' + yCx + ')');
+            caixa.append('rect').attr('x', -110).attr('y', -34).attr('width', 220).attr('height', 68).attr('rx', 12)
+                .attr('fill', 'rgba(91,155,245,.14)').attr('stroke', COR.marca).attr('stroke-width', 2);
+            caixa.append('rect').attr('x', -60).attr('y', -40).attr('width', 120).attr('height', 8).attr('rx', 4).attr('fill', COR.escuro);
+            caixa.append('text').attr('y', 10).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 24).attr('font-weight', 700).attr('fill', COR.acento).text('int()');
+
+            function nota(valor) {
+                var g = raiz.append('g').attr('opacity', 0);
+                g.append('rect').attr('x', -58).attr('y', -30).attr('width', 116).attr('height', 60).attr('rx', 6)
+                    .attr('fill', COR.marca);
+                g.append('rect').attr('x', -50).attr('y', -22).attr('width', 100).attr('height', 44).attr('rx', 4)
+                    .attr('fill', 'none').attr('stroke', 'rgba(11,18,32,.35)').attr('stroke-width', 2);
+                g.append('circle').attr('cx', -26).attr('cy', 0).attr('r', 12).attr('fill', 'rgba(11,18,32,.25)');
+                g.append('text').attr('x', 14).attr('y', 9).attr('text-anchor', 'middle').attr('font-family', SANS)
+                    .attr('font-size', 26).attr('font-weight', 800).attr('fill', COR.escuro).text(valor);
+                return g;
+            }
+            var nA = nota('10'), nB = nota('20');
+            var yN = F.vy(.88);
+            var soma = raiz.append('text').attr('x', xMeio).attr('y', yN + 10).attr('text-anchor', 'middle')
+                .attr('font-family', MONO).attr('font-size', 30).attr('font-weight', 800).attr('fill', COR.acento).attr('opacity', 0).text('= 30');
+
+            function deTerminal(i) { return { x: 36 + 300, y: F.vy(.04) + cod.h + 40 + 10 + i * term.lh + term.lh / 2 }; }
+
+            return function (t) {
+                var some = 1 - fase(t, 11.0, 11.8);
+                var r = -1, kr = 0;
+                [[0, .4, 1.6], [1, 1.6, 2.8], [2, 3.0, 4.7], [3, 5.0, 8.7]].forEach(function (l) {
+                    if (t >= l[1] && t < l[2]) { r = l[0]; kr = janela(t, l[1], l[2], .2); }
+                });
+                cod.realce(r, kr);
+                term.set(0, digitado('Primeiro número: 10', fase(t, .5, 1.1)), some);
+                term.set(1, digitado('Segundo número: 20', fase(t, 1.7, 2.3)), some);
+                term.set(2, '1020', fase(t, 4.4, 4.6) * some, COR.acento);
+                term.set(3, '30', fase(t, 8.4, 8.6) * some, COR.acento);
+
+                /* as fotos saem do teclado (terminal) e encostam uma na outra */
+                [[fA, xA, 0, 1.0], [fB, xB, 1, 2.2]].forEach(function (d) {
+                    var f = d[0], o = deTerminal(d[2]), k = EA(fase(t, d[3], d[3] + .8));
+                    var x = mix(o.x, d[1], k), y = mix(o.y, yF, k), s = mix(.4, 1, k);
+                    /* colagem: as duas se juntam no meio */
+                    var junta = EA(fase(t, 3.2, 3.9)) * (1 - EA(fase(t, 5.0, 5.6)));
+                    x = mix(x, xMeio + (d[2] === 0 ? -64 : 64), junta);
+                    /* depois caem no caixa int(), uma de cada vez */
+                    var cai = fase(t, 5.8 + d[2] * .35, 6.4 + d[2] * .35);
+                    y = mix(y, yCx - 40, d3.easeQuadIn(cai));
+                    x = mix(x, xMeio, cai);
+                    s *= 1 - .6 * cai;
+                    f.attr('transform', 'translate(' + x + ',' + y + ') scale(' + s + ')')
+                        .attr('opacity', fase(t, d[3], d[3] + .2) * (1 - fase(t, 6.2 + d[2] * .35, 6.4 + d[2] * .35)));
+                });
+                fita.attr('opacity', janela(t, 3.9, 5.0, .15));
+                colagem.attr('opacity', fase(t, 4.0, 4.3) * (1 - fase(t, 5.0, 5.4)) + .35 * fase(t, 5.2, 5.4) * some);
+
+                /* as notas de verdade saem por baixo e se somam */
+                [[nA, xA, 0], [nB, xB, 1]].forEach(function (d) {
+                    var a = 6.6 + d[2] * .35, k = EA(fase(t, a, a + .6));
+                    var x = mix(xMeio, d[1], k), y = mix(yCx + 20, yN, k);
+                    var junta = EA(fase(t, 7.6, 8.2));
+                    x = mix(x, xMeio + (d[2] === 0 ? -130 : -10), junta);
+                    d[0].attr('transform', 'translate(' + x + ',' + y + ')').attr('opacity', fase(t, a, a + .2) * some);
+                });
+                soma.attr('x', xMeio + 100).attr('opacity', fase(t, 8.2, 8.4) * some);
+            };
+        });
+    }
+
+    /* ================================================================
+       6. F-STRING MUDA SÓ A VITRINE · formulário com campo de 2 casas
+       Causa: :.2f formata a exibição com 2 casas; o valor guardado em
+       total continua o mesmo, com todas as casas.
+       Loop: três recibos impressos pelo mesmo formulário; o campo .2f
+       arredonda o que mostra, e o cofre com o valor real não muda.
+       ================================================================ */
+    function cenaRecibo(svgId) {
+        cena(svgId, 12000, function (raiz, F) {
+            var cod = codigo(raiz, 36, F.vy(.04), 400, [
+                'nome = "Ana"', 'preco = 19.9', 'total = preco * 3',
+                'print(f"Olá, {nome}!")', 'print(f"Total: {total}")', 'print(f"Total: {total:.2f}")'], 15, 'o programa');
+            var term = terminal(raiz, 36, F.vy(.04) + cod.h + 40, 400, 3, 15);
+            var LONGO = '59.699999999999996';
+
+            /* o valor guardado: não muda em nenhum momento */
+            var vx = 500, vy = F.vy(.04);
+            var guard = raiz.append('g').attr('transform', 'translate(' + vx + ',' + vy + ')');
+            var guardBorda = guard.append('rect').attr('width', 430).attr('height', 66).attr('rx', 12)
+                .attr('fill', '#0d1626').attr('stroke', COR.marca).attr('stroke-width', 2);
+            guard.append('rect').attr('x', 14).attr('y', 19).attr('width', 64).attr('height', 28).attr('rx', 6).attr('fill', COR.acento);
+            guard.append('text').attr('x', 46).attr('y', 39).attr('text-anchor', 'middle').attr('font-family', MONO)
+                .attr('font-size', 15).attr('font-weight', 700).attr('fill', COR.escuro).text('total');
+            guard.append('text').attr('x', 94).attr('y', 41).attr('font-family', MONO).attr('font-size', 20)
+                .attr('fill', COR.tinta).text(LONGO);
+            var aviso = guard.append('text').attr('x', 215).attr('y', 88).attr('text-anchor', 'middle').attr('font-family', SANS)
+                .attr('font-size', 13).attr('font-style', 'italic').attr('fill', COR.acento).attr('opacity', 0)
+                .text('o valor guardado continua com todas as casas');
+
+            /* o formulário: texto fixo + um campo que recebe o valor */
+            var fy = F.vy(.40), fx = 500;
+            var form = raiz.append('g').attr('transform', 'translate(' + fx + ',' + fy + ')');
+            form.append('rect').attr('width', 430).attr('height', 76).attr('rx', 10)
+                .attr('fill', 'rgba(255,255,255,.04)').attr('stroke', COR.linha).attr('stroke-dasharray', '6 5');
+            rotulo(form, 4, -10, 'o formulário (f-string)');
+            var prefixo = form.append('text').attr('x', 18).attr('y', 47).attr('font-family', MONO).attr('font-size', 20)
+                .attr('fill', COR.tinta).attr('xml:space', 'preserve');
+            var campo = form.append('rect').attr('y', 18).attr('height', 40).attr('rx', 6)
+                .attr('fill', 'rgba(91,155,245,.18)').attr('stroke', COR.marca).attr('stroke-width', 2);
+            var dentro = form.append('text').attr('y', 47).attr('font-family', MONO).attr('font-size', 20)
+                .attr('fill', COR.acento).attr('xml:space', 'preserve');
+            var sufixo = form.append('text').attr('y', 47).attr('font-family', MONO).attr('font-size', 20).attr('fill', COR.tinta);
+            var resto = form.append('text').attr('y', 47).attr('font-family', MONO).attr('font-size', 20)
+                .attr('fill', COR.fraco).attr('opacity', 0);
+            var selo = form.append('text').attr('x', 415).attr('y', 96).attr('text-anchor', 'end').attr('font-family', SANS)
+                .attr('font-size', 13).attr('font-weight', 700).attr('fill', COR.acento).attr('opacity', 0).text(':.2f arredonda só o que aparece');
+            var voador = raiz.append('text').attr('font-family', MONO).attr('font-size', 20).attr('fill', COR.acento).attr('opacity', 0);
+
+            /* o recibo impresso */
+            var ry = F.vy(.66);
+            var recibo = raiz.append('g');
+            recibo.append('rect').attr('x', fx + 20).attr('width', 390).attr('height', 56).attr('rx', 4).attr('fill', COR.papel);
+            var reciboTxt = recibo.append('text').attr('x', fx + 40).attr('y', 36).attr('font-family', MONO)
+                .attr('font-size', 19).attr('font-weight', 700).attr('fill', COR.escuro);
+
+            var CW = 12;   /* largura de um caractere mono a 20px */
+            var PASSOS = [
+                { t0: .6, linha: 3, pre: 'Olá, ', val: 'Ana', suf: '!', campoLarg: 4, origem: 'nome', saida: 'Olá, Ana!' },
+                { t0: 3.0, linha: 4, pre: 'Total: ', val: LONGO, suf: '', campoLarg: 19, origem: 'total', saida: 'Total: ' + LONGO },
+                { t0: 5.4, linha: 5, pre: 'Total: ', val: '59.70', suf: '', campoLarg: 6, origem: 'total', saida: 'Total: 59.70' }
+            ];
+
+            return function (t) {
+                var some = 1 - fase(t, 10.2, 10.9);
+                var p = t < 3.0 ? PASSOS[0] : t < 5.4 ? PASSOS[1] : PASSOS[2], i = PASSOS.indexOf(p), a = p.t0;
+                cod.realce(t < 10.2 ? p.linha : -1, janela(t, a, a + 2.2, .2) * (t < 8.0 ? 1 : 0));
+                var formOp = janela(t, a, a + 2.35, .2) * (t < 8.0 ? 1 : 0);
+                form.attr('opacity', formOp);
+                prefixo.text(p.pre);
+                var xc = 18 + p.pre.length * CW - 4;
+                campo.attr('x', xc).attr('width', p.campoLarg * CW + 8);
+                sufixo.attr('x', xc + p.campoLarg * CW + 10).text(p.suf);
+
+                /* o valor voa da origem até o campo */
+                var k = EA(fase(t, a + .3, a + 1.0));
+                var ox = p.origem === 'nome' ? 36 + 120 : vx + 94, oy = p.origem === 'nome' ? cod.yLinha(0) + 6 : vy + 41;
+                var bruto = i === 2 ? LONGO : p.val;
+                voador.text(bruto).attr('x', mix(ox, fx + xc + 4, k)).attr('y', mix(oy, fy + 47, k))
+                    .attr('opacity', k > 0 && k < 1 ? 1 : 0);
+                var chegou = fase(t, a + 1.0, a + 1.1);
+                if (i === 2) {
+                    /* o campo de 2 casas: a cauda cai e o número é arredondado na exibição */
+                    var corta = fase(t, a + 1.1, a + 1.7);
+                    dentro.attr('x', xc + 4).text(corta < .5 ? '59.69' : '59.70').attr('opacity', chegou * formOp);
+                    resto.attr('x', xc + 4 + 5 * CW).attr('y', 47 + 40 * d3.easeQuadIn(corta)).text('9999999999996')
+                        .attr('opacity', chegou * (1 - corta) * formOp);
+                    selo.attr('opacity', fase(t, a + 1.5, a + 1.8) * formOp);
+                } else {
+                    dentro.attr('x', xc + 4).text(p.val).attr('opacity', chegou * formOp);
+                    resto.attr('opacity', 0); selo.attr('opacity', 0);
+                }
+
+                /* o recibo sai da impressora */
+                var imp = EA(fase(t, a + 1.5, a + 2.1));
+                var fica = i === 2 && t >= 8.0;
+                recibo.attr('transform', 'translate(0,' + (ry - 30 * (1 - imp)) + ')')
+                    .attr('opacity', (fica ? 1 : fase(t, a + 1.5, a + 1.7) * (1 - fase(t, a + 2.2, a + 2.4))) * some);
+                reciboTxt.text(p.saida);
+                PASSOS.forEach(function (q, j) {
+                    term.set(j, q.saida, fase(t, q.t0 + 1.9, q.t0 + 2.1) * some, j === 0 ? COR.tinta : COR.acento);
+                });
+
+                /* e o valor guardado não mudou */
+                var lembra = janela(t, 8.0, 10.2, .3);
+                aviso.attr('opacity', lembra);
+                guardBorda.attr('stroke-width', 2 + 2 * lembra);
+            };
+        });
+    }
+
+    function ligar() {
+        cenaBagagem('stage-bagagem');
+        cenaOvos('stage-ovos');
+        cenaTriagem('stage-triagem');
+        cenaFoto('stage-foto');
+        cenaRecibo('stage-recibo');
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ligar);
+    else ligar();
+})();
+</script>
+
+
+<script>
+/* ==============================================================
+   Navegação slide a slide: setas, PageUp/Down e espaço.
+
+   As guardas importam: durante a EDIÇÃO (tecla E) e a PINTURA
+   (tecla P) o teclado pertence a esses modos. Sem isso, arrastar
+   um elemento com a seta trocaria de slide no meio da edição.
+   ============================================================== */
+(function () {
+    'use strict';
+    var secs = Array.prototype.slice.call(document.querySelectorAll('body > section'));
+    function atual() {
+        var meio = window.innerHeight / 2, achado = 0;
+        secs.forEach(function (s, i) {
+            var r = s.getBoundingClientRect();
+            if (r.top <= meio && r.bottom > meio) achado = i;
+        });
+        return achado;
+    }
+    function ir(d) {
+        var de = atual(), i = Math.max(0, Math.min(secs.length - 1, de + d));
+        if (i === de) return;
+        secs[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    document.addEventListener('keydown', function (e) {
+        if (document.body.classList.contains('me-on') || document.body.classList.contains('md-on')) return;
+        var t = e.target;
+        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''))) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (['ArrowDown', 'ArrowRight', 'PageDown', ' ', 'Spacebar'].indexOf(e.key) !== -1) { e.preventDefault(); ir(1); }
+        else if (['ArrowUp', 'ArrowLeft', 'PageUp'].indexOf(e.key) !== -1) { e.preventDefault(); ir(-1); }
+    });
+
+    /* ---------- desenho (tecla P) pertence AO SLIDE ----------
+       O mira-draw pinta num <canvas> único, fixo sobre a janela: sem
+       isto, o traço feito num slide fica pairando sobre todos os outros,
+       como se você tivesse riscado a tela e não o slide.
+
+       Aqui os traços são guardados por slide e trocados junto com ele:
+       sai do slide, o desenho sai; volta, o desenho volta. Usa a API
+       pública `getShapes`/`setShapes` do mira-draw, sem tocar no módulo.
+
+       No palco do mira-remote o desenho é da shell (modelo global
+       sincronizado com o celular), então lá isto não se mete. */
+    var porSlide = {}, ultimo = -1;
+    function trocarDesenho() {
+        if (window.__MIRA_REMOTE_STAGE__) return;
+        var md = window.miraDraw;
+        if (!md || !md.getShapes || !md.setShapes) return;   // deck sem a caneta
+        var i = atual();
+        if (i === ultimo) return;
+        if (ultimo >= 0) porSlide[ultimo] = md.getShapes();  // guarda o que estava
+        ultimo = i;
+        md.setShapes(porSlide[i] || []);
+    }
+    window.addEventListener('load', function () { ultimo = atual(); });
+    window.addEventListener('scroll', trocarDesenho, { passive: true });
+})();
+</script>
+
+<script defer src="mira/mira-edit.js"></script>
+<script defer src="mira/mira-edit-free.js"></script>
+<script defer src="mira/mira-draw.js"></script>
+</body>
+</html>
